@@ -39,18 +39,12 @@ let server = MCPServerSpec(
 
 // JSON: Claude Desktop, Claude Code, or Cursor
 let root = try MCPClientInstall.existingJSON(at: configURL)
-let merged = try MCPClientInstall.jsonConfigByAddingServer(
-    to: root,
-    server: server
-)
+let merged = try addingMCPServer(server, toJSON: root)
 let data = try MCPClientInstall.prettyJSONData(from: merged.root)
 
 // TOML: Codex
 let existing = try String(contentsOf: configURL, encoding: .utf8)
-let updated = try MCPClientInstall.codexConfigByAddingServer(
-    to: existing,
-    server: server
-)
+let updated = try addingMCPServer(server, toCodexTOML: existing)
 ```
 
 Writing is deliberately separate from merging, so an application can show a diff or
