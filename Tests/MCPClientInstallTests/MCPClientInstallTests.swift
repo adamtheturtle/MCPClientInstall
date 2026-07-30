@@ -87,6 +87,17 @@ struct TOMLConfigTests {
         #expect(block.contains(#"args = ["--serve", "two words"]"#))
     }
 
+    @Test func quotesUnicodeServerNames() {
+        let unicodeServer = MCPServerSpec(
+            name: "café",
+            command: "/demo",
+            productName: "Demo"
+        )
+
+        let block = MCPClientInstall.codexServerBlock(for: unicodeServer)
+        #expect(block.contains(#"[mcp_servers."café"]"#))
+    }
+
     @Test func appendsWithoutChangingExistingText() throws {
         let original = "[features]\nenabled = true\n"
         let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)

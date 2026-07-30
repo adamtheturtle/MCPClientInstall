@@ -195,7 +195,13 @@ public extension MCPClientInstall {
     }
 
     private static func tomlBareKey(_ value: String) -> Bool {
-        !value.isEmpty && value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
+        !value.isEmpty && value.utf8.allSatisfy {
+            (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains($0)
+                || (UInt8(ascii: "a") ... UInt8(ascii: "z")).contains($0)
+                || (UInt8(ascii: "0") ... UInt8(ascii: "9")).contains($0)
+                || $0 == UInt8(ascii: "_")
+                || $0 == UInt8(ascii: "-")
+        }
     }
 
     private static func stripCarriageReturn(_ line: String) -> String {
