@@ -331,22 +331,53 @@ private func splitTOMLKeyPath(_ value: String) -> [String]? {
     var result: [String] = []
     var current = ""
     var quote: Character?
-    var escaped = false
-    for character in value {
-        if escaped {
-            switch character {
-            case "b": current.append("\u{08}")
-            case "t": current.append("\t")
-            case "n": current.append("\n")
-            case "f": current.append("\u{0C}")
-            case "r": current.append("\r")
-            default: current.append(character)
-            }
-            escaped = false
-        } else if quote == "\"", character == "\\" {
-            escaped = true
-        } else if let activeQuote = quote {
-            if character == activeQuote {
+    var index = value.startIndex
+
+    while index < value.endIndex {
+        let character = value[index]
+        if let activeQuote = quote {
+            if activeQuote == "\"", character == "\\" {
+                let escapeIndex = value.index(after: index)
+                guard escapeIndex < value.endIndex else { return nil }
+                let escape = value[escapeIndex]
+
+                switch escape {
+                case "b": current.append("\u{08}")
+                case "t": current.append("\t")
+                case "n": current.append("\n")
+                case "f": current.append("\u{0C}")
+                case "r": current.append("\r")
+                case "e": current.append("\u{1B}")
+                case "\"", "\\": current.append(escape)
+
+                case "x", "u", "U":
+                    let width = escape == "x" ? 2 : escape == "u" ? 4 : 8
+                    let digitsStart = value.index(after: escapeIndex)
+                    guard let digitsEnd = value.index(
+                        digitsStart,
+                        offsetBy: width,
+                        limitedBy: value.endIndex
+                    ) else { return nil }
+                    let digits = value[digitsStart ..< digitsEnd]
+                    guard digits.utf8.allSatisfy({
+                        (UInt8(ascii: "0") ... UInt8(ascii: "9")).contains($0)
+                            || (UInt8(ascii: "A") ... UInt8(ascii: "F")).contains($0)
+                            || (UInt8(ascii: "a") ... UInt8(ascii: "f")).contains($0)
+                    }),
+                    let scalarValue = UInt32(digits, radix: 16),
+                    let scalar = Unicode.Scalar(scalarValue)
+                    else { return nil }
+                    current.unicodeScalars.append(scalar)
+                    index = digitsEnd
+                    continue
+
+                default:
+                    return nil
+                }
+
+                index = value.index(after: escapeIndex)
+                continue
+            } else if character == activeQuote {
                 quote = nil
             } else {
                 current.append(character)
@@ -361,8 +392,9 @@ private func splitTOMLKeyPath(_ value: String) -> [String]? {
         } else {
             current.append(character)
         }
+        index = value.index(after: index)
     }
-    guard quote == nil, !escaped else { return nil }
+    guard quote == nil else { return nil }
     let key = current.trimmingCharacters(in: .whitespaces)
     guard !key.isEmpty else { return nil }
     result.append(key)
