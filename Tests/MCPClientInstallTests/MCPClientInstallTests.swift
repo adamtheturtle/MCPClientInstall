@@ -59,6 +59,16 @@ struct JSONConfigTests {
         try Data(" \n\t".utf8).write(to: blank)
         #expect(try MCPClientInstall.existingJSON(at: blank).isEmpty)
     }
+
+    @Test func refusesNonUTF8Files() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data([0xff]).write(to: file)
+
+        #expect(throws: CocoaError.self) {
+            try MCPClientInstall.existingJSON(at: file)
+        }
+    }
 }
 
 @Suite("Codex TOML configuration")
