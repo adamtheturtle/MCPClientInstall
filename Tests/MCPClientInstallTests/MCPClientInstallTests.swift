@@ -176,6 +176,31 @@ struct TOMLConfigTests {
         }
     }
 
+    @Test func recognizesUnicodeEscapesInQuotedServerKeys() throws {
+        let escaped = #"""
+        [mcp_servers."demo\u002Eserver"]
+        command = "/old"
+        args = ["old"]
+        """#
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: escaped, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(!merged.text.contains(#"\u002E"#))
+        #expect(!merged.text.contains(#"command = "/old""#))
+        #expect(merged.text.contains(#"[mcp_servers."demo.server"]"#))
+
+        let longEscape = #"""
+        [mcp_servers."demo\U0000002Eserver"]
+        command = "/old"
+        args = ["old"]
+        """#
+        #expect(
+            MCPClientInstall.scanCodexConfig(longEscape, serverName: server.name).declaration
+                == .table
+        )
+    }
+
     @Test func retainsCRLFLineEndings() throws {
         let original = "[features]\r\nenabled = true\r\n"
         let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
