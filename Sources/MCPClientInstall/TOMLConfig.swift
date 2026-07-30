@@ -65,7 +65,11 @@ public extension MCPClientInstall {
     /// Scans for declarations of `serverName` without interpreting apparent
     /// headers inside multiline strings or arrays.
     static func scanCodexConfig(_ text: String, serverName: String) -> TOMLScan {
-        let lines = text.components(separatedBy: "\n")
+        // Normalize physical lines before parsing. Foundation's character-set
+        // treatment of CR differs across platforms; doing this explicitly keeps
+        // the scanner byte-for-byte equivalent on Darwin and Linux.
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n")
         var currentTable: [String] = []
         var tableRanges: [Range<Int>] = []
         var hasUnsafeDeclaration = false
@@ -111,7 +115,9 @@ public extension MCPClientInstall {
     /// line scanner. This deliberately isn't a complete TOML validator.
     static func codexConfigStructuralProblem(in text: String) -> String? {
         var state = TOMLLineState()
-        for (offset, rawLine) in text.components(separatedBy: "\n").enumerated() {
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n")
+        for (offset, rawLine) in lines.enumerated() {
             let continuation = state.isInsideMultilineConstruct
             state.consume(rawLine)
             if continuation { continue }
