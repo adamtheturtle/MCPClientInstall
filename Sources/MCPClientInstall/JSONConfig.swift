@@ -68,7 +68,9 @@ public extension MCPClientInstall {
         // Whitespace-only counts as blank. A file holding just a newline is empty
         // to the person who made it, and rejecting it as corrupt would refuse to
         // write a config the installer could perfectly well create.
-        let text = String(bytes: data, encoding: .utf8) ?? ""
+        guard let text = String(bytes: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadInapplicableStringEncoding)
+        }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [:] }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw CocoaError(.propertyListReadCorrupt)
