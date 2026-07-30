@@ -39,3 +39,5 @@ The package also provides guarded file replacement through
 
 - ``MCPClientInstall/writeConfig(_:to:backupSuffix:)``
 - ``MCPClientInstall/configPathKind(at:)``
+- ``writeMCPConfiguration(_:to:backupSuffix:)``
+- ``classifyMCPConfigurationPath(at:)``

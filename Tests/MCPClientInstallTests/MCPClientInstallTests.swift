@@ -38,6 +38,16 @@ struct JSONConfigTests {
         }
     }
 
+    @Test func verifiesTheExpectedServerShape() throws {
+        let server = MCPServerSpec(name: "demo", command: "/demo", productName: "Demo")
+        let merged = try addingMCPServer(server, toJSON: [:])
+        #expect(mcpServerIsConfigured(server, inJSON: merged.root))
+        #expect(!mcpServerIsConfigured(
+            MCPServerSpec(name: "demo", command: "/other", productName: "Demo"),
+            inJSON: merged.root
+        ))
+    }
+
     @Test func absentAndWhitespaceOnlyFilesAreEmpty() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -113,6 +123,15 @@ struct TOMLConfigTests {
         let original = "[features]\r\nenabled = true\r\n"
         let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
         #expect(MCPClientInstall.dominantLineEnding(of: merged.text) == "\r\n")
+    }
+
+    @Test func verifiesTheExpectedCodexServerShape() throws {
+        let merged = try addingMCPServer(server, toCodexTOML: "")
+        #expect(mcpServerIsConfigured(server, inCodexTOML: merged.text))
+        #expect(!mcpServerIsConfigured(
+            MCPServerSpec(name: server.name, command: "/other", productName: "Demo"),
+            inCodexTOML: merged.text
+        ))
     }
 }
 
