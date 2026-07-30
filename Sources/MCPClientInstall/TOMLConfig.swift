@@ -161,7 +161,10 @@ public extension MCPClientInstall {
             }
             var lines = scan.lines
             let body = Array(lines[range]).map(stripCarriageReturn)
-            lines.replaceSubrange(range, with: codexTableReplacement(body: body, server: server))
+            lines.replaceSubrange(
+                range,
+                with: try codexTableReplacement(body: body, server: server)
+            )
             return (lines.map(stripCarriageReturn).joined(separator: newline), true)
 
         case .other:
@@ -178,16 +181,34 @@ public extension MCPClientInstall {
         return crlf > lf ? "\r\n" : "\n"
     }
 
-    private static func codexTableReplacement(body: [String], server: MCPServerSpec) -> [String] {
+    private static func codexTableReplacement(
+        body: [String],
+        server: MCPServerSpec
+    ) throws -> [String] {
         let block = codexServerBlock(for: server).components(separatedBy: "\n")
         guard body.count > 1 else { return block }
 
-        let retained = body.dropFirst().filter { line in
-            guard let path = tomlKeyValueKeyPath(line.trimmingCharacters(in: .whitespaces)) else {
-                return true
+        var retained: [String] = []
+        var state = TOMLLineState()
+        var removingOwnedValue = false
+        for line in body.dropFirst() {
+            if !state.isInsideMultilineConstruct,
+               let path = tomlKeyValueKeyPath(line.trimmingCharacters(in: .whitespaces)),
+               path == ["command"] || path == ["args"] {
+                removingOwnedValue = true
             }
-            return path != ["command"] && path != ["args"]
+
+            state.consume(line)
+            if !removingOwnedValue {
+                retained.append(line)
+            } else if !state.isInsideMultilineConstruct {
+                removingOwnedValue = false
+            }
         }
+        guard !removingOwnedValue else {
+            throw TOMLConfigError("The existing server table contains an unclosed value.")
+        }
+
         var result = Array(block.dropLast())
         result.append(contentsOf: retained.filter { !$0.isEmpty })
         result.append("")
