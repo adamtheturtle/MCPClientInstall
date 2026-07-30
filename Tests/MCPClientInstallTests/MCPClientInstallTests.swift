@@ -123,6 +123,42 @@ struct TOMLConfigTests {
         #expect(!merged.text.contains(#"command = "/old""#))
     }
 
+    @Test func replacesCompleteMultilineOwnedValues() throws {
+        let original = #"""
+        [mcp_servers."demo.server"]
+        command = """
+        /old
+        """
+        args = [
+          "old",
+        ]
+        env = { TOKEN = "keep" }
+        """#
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(merged.text.contains(#"command = "/tmp/a\"b\\c""#))
+        #expect(merged.text.contains(#"args = ["--serve", "two words"]"#))
+        #expect(merged.text.contains(#"env = { TOKEN = "keep" }"#))
+        #expect(!merged.text.contains("/old"))
+        #expect(!merged.text.contains(#""old""#))
+        #expect(!merged.text.contains(#"""""#))
+    }
+
+    @Test func refusesAnUnclosedOwnedValue() {
+        let original = #"""
+        [mcp_servers."demo.server"]
+        command = "/old"
+        args = [
+          "old",
+        """#
+
+        #expect(throws: MCPClientInstall.TOMLConfigError.self) {
+            try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+        }
+    }
+
     @Test func ignoresHeaderLikeTextInsideMultilineValues() throws {
         let original = #"""
         notes = """
