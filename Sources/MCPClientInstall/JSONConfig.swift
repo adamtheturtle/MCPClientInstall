@@ -42,6 +42,7 @@ public extension MCPClientInstall {
         }
 
         let alreadyPresent: Bool
+        var serverEntry: [String: Any]
         if let existing = servers[server.name] {
             guard let object = existing as? [String: Any],
                   object["command"] is String,
@@ -50,10 +51,14 @@ public extension MCPClientInstall {
                 throw JSONConfigError.incompatibleServer(name: server.name)
             }
             alreadyPresent = true
+            serverEntry = object
         } else {
             alreadyPresent = false
+            serverEntry = [:]
         }
-        servers[server.name] = ["command": server.command, "args": server.arguments]
+        serverEntry["command"] = server.command
+        serverEntry["args"] = server.arguments
+        servers[server.name] = serverEntry
         root["mcpServers"] = servers
         return JSONMergeResult(root: root, alreadyPresent: alreadyPresent)
     }

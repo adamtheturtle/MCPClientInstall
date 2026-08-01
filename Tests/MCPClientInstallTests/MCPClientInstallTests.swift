@@ -38,6 +38,36 @@ struct JSONConfigTests {
         }
     }
 
+    @Test func preservesCustomSettingsWhenUpdatingServer() throws {
+        let root: [String: Any] = [
+            "mcpServers": [
+                "demo": [
+                    "command": "/old",
+                    "args": ["old"],
+                    "env": ["TOKEN": "keep"],
+                    "disabled": true,
+                    "timeout": 30
+                ]
+            ]
+        ]
+        let server = MCPServerSpec(
+            name: "demo",
+            command: "/new",
+            arguments: ["new"],
+            productName: "Demo"
+        )
+
+        let merged = try MCPClientInstall.jsonConfigByAddingServer(to: root, server: server)
+        let servers = try #require(merged.root["mcpServers"] as? [String: Any])
+        let entry = try #require(servers["demo"] as? [String: Any])
+
+        #expect(entry["command"] as? String == "/new")
+        #expect(entry["args"] as? [String] == ["new"])
+        #expect(entry["env"] as? [String: String] == ["TOKEN": "keep"])
+        #expect(entry["disabled"] as? Bool == true)
+        #expect(entry["timeout"] as? Int == 30)
+    }
+
     @Test func verifiesTheExpectedServerShape() throws {
         let server = MCPServerSpec(name: "demo", command: "/demo", productName: "Demo")
         let merged = try addingMCPServer(server, toJSON: [:])
