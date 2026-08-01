@@ -10,7 +10,7 @@
 import Foundation
 
 /// An MCP desktop client this package can install a server entry into.
-public enum MCPDesktopClient: String, CaseIterable, Identifiable, Sendable {
+public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Sendable {
     case claudeDesktop
     case claudeCode
     case codex
