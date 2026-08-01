@@ -40,7 +40,7 @@ public extension MCPClientInstall {
             case "\u{0C}": escaped += "\\f"
             case "\r": escaped += "\\r"
             default:
-                if scalar.value < 0x20 || scalar.value == 0x7F {
+                if scalar.value < 0x20 || (0x7F ... 0x9F).contains(scalar.value) {
                     escaped += String(format: "\\u%04X", scalar.value)
                 } else {
                     escaped.unicodeScalars.append(scalar)

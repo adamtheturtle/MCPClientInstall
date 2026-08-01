@@ -112,6 +112,8 @@ struct TOMLConfigTests {
 
     @Test func escapesBasicStringsAndQuotesDottedServerNames() {
         #expect(MCPClientInstall.tomlBasicString(#"a"b\c"#) == #""a\"b\\c""#)
+        #expect(MCPClientInstall.tomlBasicString("a\u{7F}\u{80}\u{9F}b") == #""a\u007F\u0080\u009Fb""#)
+        #expect(MCPClientInstall.tomlBasicString("a\u{A0}b") == "\"a\u{A0}b\"")
         let block = MCPClientInstall.codexServerBlock(for: server)
         #expect(block.contains(#"[mcp_servers."demo.server"]"#))
         #expect(block.contains(#"args = ["--serve", "two words"]"#))
