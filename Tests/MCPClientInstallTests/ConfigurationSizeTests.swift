@@ -15,14 +15,13 @@ struct ConfigurationSizeTests {
     @Test func `workflow reports the bound and leaves input untouched`() throws {
         let file = try oversizedFile(named: "config.toml")
         let sizeBefore = try fileSize(at: file)
-        let server = MCPServerSpec(name: "demo", command: "/demo", productName: "Demo")
+        let server = MCPServerSpec(name: "demo", command: "/demo")
 
         do {
             _ = try MCPClientInstall.installServer(
                 server,
                 format: .codexTOML,
                 at: file,
-                backupSuffix: ".backup",
             )
             Issue.record("Expected an oversized-file error")
         } catch let error as MCPClientInstall.InstallWorkflowError {

@@ -10,7 +10,7 @@ struct JSONConfigTests {
             "theme": "dark",
             "mcpServers": ["other": ["command": "/other"]]
         ]
-        let server = MCPServerSpec(name: "demo", command: "/usr/bin/demo", productName: "Demo")
+        let server = MCPServerSpec(name: "demo", command: "/usr/bin/demo")
 
         let first = try MCPClientInstall.jsonConfigByAddingServer(to: root, server: server)
         #expect(!first.alreadyPresent)
@@ -24,7 +24,7 @@ struct JSONConfigTests {
         #expect(throws: MCPClientInstall.JSONConfigError.self) {
             try MCPClientInstall.jsonConfigByAddingServer(
                 to: ["mcpServers": "do not overwrite me"],
-                server: MCPServerSpec(name: "demo", command: "demo", productName: "Demo")
+                server: MCPServerSpec(name: "demo", command: "demo")
             )
         }
     }
@@ -33,7 +33,7 @@ struct JSONConfigTests {
         #expect(throws: MCPClientInstall.JSONConfigError.self) {
             try MCPClientInstall.jsonConfigByAddingServer(
                 to: ["mcpServers": ["demo": "do not overwrite me"]],
-                server: MCPServerSpec(name: "demo", command: "demo", productName: "Demo")
+                server: MCPServerSpec(name: "demo", command: "demo")
             )
         }
     }
@@ -53,8 +53,7 @@ struct JSONConfigTests {
         let server = MCPServerSpec(
             name: "demo",
             command: "/new",
-            arguments: ["new"],
-            productName: "Demo"
+            arguments: ["new"]
         )
 
         let merged = try MCPClientInstall.jsonConfigByAddingServer(to: root, server: server)
@@ -69,11 +68,11 @@ struct JSONConfigTests {
     }
 
     @Test func verifiesTheExpectedServerShape() throws {
-        let server = MCPServerSpec(name: "demo", command: "/demo", productName: "Demo")
+        let server = MCPServerSpec(name: "demo", command: "/demo")
         let merged = try addingMCPServer(server, toJSON: [:])
         #expect(mcpServerIsConfigured(server, inJSON: merged.root))
         #expect(!mcpServerIsConfigured(
-            MCPServerSpec(name: "demo", command: "/other", productName: "Demo"),
+            MCPServerSpec(name: "demo", command: "/other"),
             inJSON: merged.root
         ))
     }
@@ -106,8 +105,7 @@ struct TOMLConfigTests {
     private let server = MCPServerSpec(
         name: "demo.server",
         command: #"/tmp/a"b\c"#,
-        arguments: ["--serve", "two words"],
-        productName: "Demo"
+        arguments: ["--serve", "two words"]
     )
 
     @Test func escapesBasicStringsAndQuotesDottedServerNames() {
@@ -122,8 +120,7 @@ struct TOMLConfigTests {
     @Test func quotesUnicodeServerNames() {
         let unicodeServer = MCPServerSpec(
             name: "café",
-            command: "/demo",
-            productName: "Demo"
+            command: "/demo"
         )
 
         let block = MCPClientInstall.codexServerBlock(for: unicodeServer)
@@ -265,7 +262,7 @@ struct TOMLConfigTests {
         let merged = try addingMCPServer(server, toCodexTOML: "")
         #expect(mcpServerIsConfigured(server, inCodexTOML: merged.text))
         #expect(!mcpServerIsConfigured(
-            MCPServerSpec(name: server.name, command: "/other", productName: "Demo"),
+            MCPServerSpec(name: server.name, command: "/other"),
             inCodexTOML: merged.text
         ))
     }
@@ -286,7 +283,7 @@ struct ConfigPathTests {
 
 @Suite("Transactional installation")
 struct InstallWorkflowTests {
-    private let server = MCPServerSpec(name: "demo", command: "/demo", productName: "Demo")
+    private let server = MCPServerSpec(name: "demo", command: "/demo", backupSuffix: ".backup")
 
     @Test func installsAbsentJSONAndVerifiesIt() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
@@ -294,8 +291,7 @@ struct InstallWorkflowTests {
         let result = try MCPClientInstall.installServer(
             server,
             format: .json,
-            at: file,
-            backupSuffix: ".backup"
+            at: file
         )
 
         #expect(result.backupURL == nil)
@@ -308,8 +304,7 @@ struct InstallWorkflowTests {
         _ = try MCPClientInstall.installServer(
             server,
             format: .codexTOML,
-            at: file,
-            backupSuffix: ".backup"
+            at: file
         )
 
         let text = try String(contentsOf: file, encoding: .utf8)
@@ -328,8 +323,7 @@ struct InstallWorkflowTests {
             try MCPClientInstall.installServer(
                 server,
                 format: .json,
-                at: file,
-                backupSuffix: ".backup"
+                at: file
             )
         }
         #expect(try Data(contentsOf: file) == data)
@@ -342,15 +336,14 @@ struct InstallWorkflowTests {
         let installed = try MCPClientInstall.installServer(
             server,
             format: .json,
-            at: file,
-            backupSuffix: ".backup"
+            at: file
         )
         let backup = try #require(installed.backupURL)
         #expect(FileManager.default.fileExists(atPath: backup.path))
 
         let restored = try MCPClientInstall.restoreBackup(
+            for: server,
             at: file,
-            backupSuffix: ".backup",
             displacedSuffix: ".replaced"
         )
         let displaced = try #require(restored.displacedURL)
@@ -367,7 +360,6 @@ struct InstallWorkflowTests {
                 server,
                 format: .json,
                 at: file,
-                backupSuffix: ".backup",
                 verificationOverride: { false }
             )
             Issue.record("Expected verification to fail")

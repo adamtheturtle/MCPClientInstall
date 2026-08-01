@@ -28,35 +28,75 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
         }
     }
 
-    /// How this client's on-disk config is shaped.
-    public enum Format: Sendable {
-        /// A top-level `mcpServers` JSON object (Claude Desktop, Cursor, and the
-        /// JSON file Claude Code also reads at `~/.claude.json`).
-        case json
-        /// A `[mcp_servers.<name>]` TOML table (Codex).
-        case toml
-    }
-
-    /// The on-disk format this client uses.
+    /// A configuration location relative to a caller-supplied home directory.
     ///
-    /// Claude Code's *CLI* prefers `claude mcp add …`, but its settings file at
-    /// `~/.claude.json` is the same JSON shape as Claude Desktop. This package
-    /// installs into that file, so Claude Code is `.json` here.
-    public var format: Format {
-        switch self {
-        case .claudeDesktop, .claudeCode, .cursor: .json
-        case .codex: .toml
+    /// `fallbackDirectoryComponents` supports sandboxed apps that ask the user for
+    /// a visible parent when the preferred hidden directory does not exist yet.
+    public struct ConfigurationLocation: Equatable, Sendable {
+        public let directoryComponents: [String]
+        public let fallbackDirectoryComponents: [String]
+        public let fileName: String
+        public let format: MCPClientInstall.ConfigurationFormat
+
+        public init(
+            directoryComponents: [String],
+            fallbackDirectoryComponents: [String],
+            fileName: String,
+            format: MCPClientInstall.ConfigurationFormat
+        ) {
+            self.directoryComponents = directoryComponents
+            self.fallbackDirectoryComponents = fallbackDirectoryComponents
+            self.fileName = fileName
+            self.format = format
+        }
+
+        public func directory(relativeTo homeDirectory: URL) -> URL {
+            directoryComponents.reduce(homeDirectory) {
+                $0.appendingPathComponent($1, isDirectory: true)
+            }
+        }
+
+        public func fallbackDirectory(relativeTo homeDirectory: URL) -> URL {
+            fallbackDirectoryComponents.reduce(homeDirectory) {
+                $0.appendingPathComponent($1, isDirectory: true)
+            }
         }
     }
+
+    /// The canonical on-disk location and representation for this client.
+    public var configurationLocation: ConfigurationLocation {
+        switch self {
+        case .claudeDesktop:
+            ConfigurationLocation(
+                directoryComponents: ["Library", "Application Support", "Claude"],
+                fallbackDirectoryComponents: ["Library", "Application Support"],
+                fileName: "claude_desktop_config.json",
+                format: .json
+            )
+        case .claudeCode:
+            ConfigurationLocation(
+                directoryComponents: [], fallbackDirectoryComponents: [],
+                fileName: ".claude.json", format: .json
+            )
+        case .codex:
+            ConfigurationLocation(
+                directoryComponents: [".codex"], fallbackDirectoryComponents: [],
+                fileName: "config.toml", format: .codexTOML
+            )
+        case .cursor:
+            ConfigurationLocation(
+                directoryComponents: [".cursor"], fallbackDirectoryComponents: [],
+                fileName: "mcp.json", format: .json
+            )
+        }
+    }
+
+    public var format: MCPClientInstall.ConfigurationFormat { configurationLocation.format }
 
     /// Default config-file location, for a "paste into …" hint. May not exist yet.
     public var configPath: String {
-        switch self {
-        case .claudeDesktop: "~/Library/Application Support/Claude/claude_desktop_config.json"
-        case .claudeCode: "~/.claude.json"
-        case .codex: "~/.codex/config.toml"
-        case .cursor: "~/.cursor/mcp.json"
-        }
+        (["~"] + configurationLocation.directoryComponents + [configurationLocation.fileName])
+            .joined(separator: "/")
     }
 
     /// How to make the client pick up a newly written server entry.
@@ -100,7 +140,7 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
             )) ?? Data("{}".utf8)
             return String(data: data, encoding: .utf8) ?? "{}"
 
-        case .toml:
+        case .codexTOML:
             return MCPClientInstall.codexServerBlock(for: server)
         }
     }

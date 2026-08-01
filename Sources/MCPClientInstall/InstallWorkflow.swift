@@ -98,25 +98,23 @@ public extension MCPClientInstall {
         _ server: MCPServerSpec,
         format: ConfigurationFormat,
         at url: URL,
-        backupSuffix: String,
     ) throws -> InstallWorkflowResult {
         try installServer(
             server,
             format: format,
             at: url,
-            backupSuffix: backupSuffix,
             verificationOverride: nil,
         )
     }
 
     /// Restores the side-by-side backup and retains the displaced current file.
     static func restoreBackup(
+        for server: MCPServerSpec,
         at url: URL,
-        backupSuffix: String,
         displacedSuffix: String,
     ) throws -> RestoreWorkflowResult {
         let manager = FileManager.default
-        let backupURL = sibling(of: url, suffix: backupSuffix)
+        let backupURL = sibling(of: url, suffix: server.backupSuffix)
         guard configPathKind(at: backupURL) == .regularFile else {
             throw InstallWorkflowError.backupUnavailable(url: backupURL)
         }
@@ -158,13 +156,12 @@ extension MCPClientInstall {
         _ server: MCPServerSpec,
         format: ConfigurationFormat,
         at url: URL,
-        backupSuffix: String,
         verificationOverride: (() -> Bool)?,
     ) throws -> InstallWorkflowResult {
         let existed = configPathKind(at: url) == .regularFile
         let prepared = try prepareServerUpdate(server, format: format, at: url)
         do {
-            try writeConfig(prepared.data, to: url, backupSuffix: backupSuffix)
+            try writeConfig(prepared.data, to: url, backupSuffix: server.backupSuffix)
         } catch {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }
@@ -174,7 +171,7 @@ extension MCPClientInstall {
         } else {
             verifyServer(server, format: format, at: url)
         }
-        let backupURL = existed ? sibling(of: url, suffix: backupSuffix) : nil
+        let backupURL = existed ? sibling(of: url, suffix: server.backupSuffix) : nil
         guard verified else {
             throw InstallWorkflowError.verificationFailed(url: url, backupURL: backupURL)
         }

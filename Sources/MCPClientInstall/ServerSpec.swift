@@ -18,8 +18,6 @@ public struct MCPServerSpec: Sendable, Equatable {
     public var command: String
     /// Arguments passed to `command`, e.g. `["--mcp"]`.
     public var arguments: [String]
-    /// Human-facing product name for alerts and grant-access copy, e.g. `"MyApp"`.
-    public var productName: String
     /// Suffix appended to the previous config when rewriting an existing file,
     /// e.g. `".myapp-mcp-backup"`. Kept beside the target so a rewrite defect is
     /// recoverable.
@@ -29,13 +27,11 @@ public struct MCPServerSpec: Sendable, Equatable {
         name: String,
         command: String,
         arguments: [String] = ["--mcp"],
-        productName: String,
         backupSuffix: String? = nil
     ) {
         self.name = name
         self.command = command
         self.arguments = arguments
-        self.productName = productName
         self.backupSuffix = backupSuffix ?? ".\(name)-mcp-backup"
     }
 }

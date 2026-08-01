@@ -14,6 +14,10 @@ Use ``MCPServerSpec`` to describe a server, then merge it with
 The package also provides guarded file replacement through
 ``MCPClientInstall/writeConfig(_:to:backupSuffix:)``.
 
+``MCPDesktopClient/configurationLocation`` describes each supported client's
+configuration relative to a caller-supplied home directory. Applications remain
+responsible for resolving that home and obtaining filesystem authorization.
+
 ## Topics
 
 ### Server identity

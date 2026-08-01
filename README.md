@@ -33,9 +33,12 @@ import MCPClientInstall
 let server = MCPServerSpec(
     name: "my-server",
     command: "/usr/local/bin/my-server",
-    arguments: ["--mcp"],
-    productName: "My Server"
+    arguments: ["--mcp"]
 )
+
+let location = MCPDesktopClient.codex.configurationLocation
+let directory = location.directory(relativeTo: homeDirectory)
+let configURL = directory.appendingPathComponent(location.fileName)
 
 // JSON: Claude Desktop, Claude Code, or Cursor
 let root = try MCPClientInstall.existingJSON(at: configURL)
@@ -55,6 +58,23 @@ try MCPClientInstall.writeConfig(
     data,
     to: configURL,
     backupSuffix: server.backupSuffix
+)
+```
+
+For a complete prepare, safe replacement, read-back verification, and recoverable
+backup in one operation:
+
+```swift
+let result = try MCPClientInstall.installServer(
+    server,
+    format: location.format,
+    at: configURL
+)
+
+let restored = try MCPClientInstall.restoreBackup(
+    for: server,
+    at: configURL,
+    displacedSuffix: ".my-server-before-restore"
 )
 ```
 
