@@ -147,7 +147,7 @@ public enum MCPClientInstall {
             }
 
             if let permissions = try manager.attributesOfItem(atPath: url.path)[.posixPermissions] {
-                try manager.setAttributes([.posixPermissions: permissions], atPath: temporary.path)
+                try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: temporary.path)
             }
             try manager.moveItem(at: url, to: backup)
             parkedCurrent = true
