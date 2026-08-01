@@ -3,11 +3,17 @@ import PackageDescription
 
 /// Safe, non-destructive editing of MCP desktop-client configuration files.
 ///
-/// Foundation-only and dependency-free. The package supports macOS and Linux;
+/// Foundation-only. The package supports Apple platforms and Linux;
 /// Apple platform declarations do not restrict SwiftPM's Linux availability.
 let package = Package(
     name: "MCPClientInstall",
-    platforms: [.macOS(.v14)],
+    platforms: [
+        .macOS(.v14),
+        .iOS(.v17),
+        .tvOS(.v17),
+        .watchOS(.v10),
+        .visionOS(.v1),
+    ],
     products: [
         .library(name: "MCPClientInstall", targets: ["MCPClientInstall"])
     ],
