@@ -281,3 +281,108 @@ struct ConfigPathTests {
         #expect(MCPClientInstall.configPathKind(at: file) == .regularFile)
     }
 }
+
+@Suite("Transactional installation")
+struct InstallWorkflowTests {
+    private let server = MCPServerSpec(name: "demo", command: "/demo", productName: "Demo")
+
+    @Test func installsAbsentJSONAndVerifiesIt() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+
+        let result = try MCPClientInstall.installServer(
+            server,
+            format: .json,
+            at: file,
+            backupSuffix: ".backup"
+        )
+
+        #expect(result.backupURL == nil)
+        #expect(mcpServerIsConfigured(server, inJSON: try readMCPJSONConfiguration(at: file)))
+    }
+
+    @Test func installsAbsentCodexTOMLAndVerifiesIt() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.toml")
+
+        _ = try MCPClientInstall.installServer(
+            server,
+            format: .codexTOML,
+            at: file,
+            backupSuffix: ".backup"
+        )
+
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(mcpServerIsConfigured(server, inCodexTOML: text))
+    }
+
+    @Test(
+        "Rejects malformed and incompatible JSON before writing",
+        arguments: [Data("{".utf8), Data(#"{"mcpServers":{"demo":"keep"}}"#.utf8)]
+    )
+    func refusesUnsafeJSON(data: Data) throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try data.write(to: file)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.self) {
+            try MCPClientInstall.installServer(
+                server,
+                format: .json,
+                at: file,
+                backupSuffix: ".backup"
+            )
+        }
+        #expect(try Data(contentsOf: file) == data)
+    }
+
+    @Test func backsUpAndRestoresARegularJSONFile() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data(#"{"theme":"dark"}"#.utf8).write(to: file)
+
+        let installed = try MCPClientInstall.installServer(
+            server,
+            format: .json,
+            at: file,
+            backupSuffix: ".backup"
+        )
+        let backup = try #require(installed.backupURL)
+        #expect(FileManager.default.fileExists(atPath: backup.path))
+
+        let restored = try MCPClientInstall.restoreBackup(
+            at: file,
+            backupSuffix: ".backup",
+            displacedSuffix: ".replaced"
+        )
+        let displaced = try #require(restored.displacedURL)
+        #expect(try String(contentsOf: file, encoding: .utf8) == #"{"theme":"dark"}"#)
+        #expect(FileManager.default.fileExists(atPath: displaced.path))
+    }
+
+    @Test func verificationFailureReportsTheRecoverableBackup() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data("{}".utf8).write(to: file)
+
+        do {
+            _ = try MCPClientInstall.installServer(
+                server,
+                format: .json,
+                at: file,
+                backupSuffix: ".backup",
+                verificationOverride: { false }
+            )
+            Issue.record("Expected verification to fail")
+        } catch let error as MCPClientInstall.InstallWorkflowError {
+            guard case let .verificationFailed(_, backupURL) = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+            #expect(backupURL?.lastPathComponent == "config.json.backup")
+            #expect(FileManager.default.fileExists(atPath: backupURL?.path ?? ""))
+        }
+    }
+
+    private func temporaryDirectory() -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+}
