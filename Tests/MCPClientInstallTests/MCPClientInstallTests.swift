@@ -373,6 +373,19 @@ struct InstallWorkflowTests {
         }
     }
 
+    @Test func repeatedUpdatesRotateTheRecoverableBackup() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data(#"{"version":1}"#.utf8).write(to: file)
+        _ = try MCPClientInstall.installServer(server, format: .json, at: file)
+
+        try Data(#"{"version":2}"#.utf8).write(to: file)
+        _ = try MCPClientInstall.installServer(server, format: .json, at: file)
+
+        let backup = file.deletingLastPathComponent()
+            .appendingPathComponent(file.lastPathComponent + server.backupSuffix)
+        #expect(try String(contentsOf: backup, encoding: .utf8) == #"{"version":2}"#)
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -106,6 +106,9 @@ public enum MCPClientInstall {
         let temporary = url.deletingLastPathComponent()
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
         try data.write(to: temporary, options: .atomic)
+#if os(Linux)
+        try replaceConfigOnLinux(at: url, with: temporary, backupSuffix: backupSuffix)
+#else
         do {
             _ = try manager.replaceItemAt(
                 url,
@@ -117,5 +120,54 @@ public enum MCPClientInstall {
             try? manager.removeItem(at: temporary)
             throw error
         }
+#endif
     }
+
+#if os(Linux)
+    /// Foundation's `replaceItemAt` is unavailable as a reliable transactional
+    /// primitive on Linux. Rename the current file aside, install the prepared
+    /// file, and roll both the current and pre-existing backup back on failure.
+    private static func replaceConfigOnLinux(
+        at url: URL,
+        with temporary: URL,
+        backupSuffix: String
+    ) throws {
+        let manager = FileManager.default
+        let directory = url.deletingLastPathComponent()
+        let backup = directory.appendingPathComponent(url.lastPathComponent + backupSuffix)
+        let previousBackup = directory
+            .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).previous-backup")
+        var parkedPreviousBackup = false
+        var parkedCurrent = false
+
+        do {
+            if manager.fileExists(atPath: backup.path) {
+                try manager.moveItem(at: backup, to: previousBackup)
+                parkedPreviousBackup = true
+            }
+
+            if let permissions = try manager.attributesOfItem(atPath: url.path)[.posixPermissions] {
+                try manager.setAttributes([.posixPermissions: permissions], atPath: temporary.path)
+            }
+            try manager.moveItem(at: url, to: backup)
+            parkedCurrent = true
+            try manager.moveItem(at: temporary, to: url)
+
+            if parkedPreviousBackup {
+                try manager.removeItem(at: previousBackup)
+            }
+        } catch {
+            if manager.fileExists(atPath: temporary.path) {
+                try? manager.removeItem(at: temporary)
+            }
+            if parkedCurrent, !manager.fileExists(atPath: url.path) {
+                try? manager.moveItem(at: backup, to: url)
+            }
+            if parkedPreviousBackup, !manager.fileExists(atPath: backup.path) {
+                try? manager.moveItem(at: previousBackup, to: backup)
+            }
+            throw error
+        }
+    }
+#endif
 }
