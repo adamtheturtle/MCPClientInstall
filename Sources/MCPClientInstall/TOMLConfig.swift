@@ -1,4 +1,5 @@
 import Foundation
+import TOML
 
 public extension MCPClientInstall {
     /// How a server name is already declared in a Codex configuration.
@@ -142,6 +143,12 @@ public extension MCPClientInstall {
         to text: String,
         server: MCPServerSpec
     ) throws -> (text: String, alreadyPresent: Bool) {
+        do {
+            _ = try TOMLDecoder().decode(TOMLValidationDocument.self, from: text)
+        } catch {
+            throw TOMLConfigError("The existing config is not valid TOML: \(error.localizedDescription)")
+        }
+
         let scan = scanCodexConfig(text, serverName: server.name)
         let newline = dominantLineEnding(of: text)
         let block = codexServerBlock(for: server)
@@ -246,6 +253,8 @@ public extension MCPClientInstall {
         return header ..< index
     }
 }
+
+private struct TOMLValidationDocument: Decodable {}
 
 private struct TOMLLineState {
     private enum StringState { case none, multilineBasic, multilineLiteral }

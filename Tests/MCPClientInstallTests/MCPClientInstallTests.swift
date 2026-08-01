@@ -189,6 +189,28 @@ struct TOMLConfigTests {
         }
     }
 
+    @Test(
+        "Refuses malformed TOML before merging",
+        arguments: [
+            "model = \"gpt",
+            "model = 'gpt",
+            "model =",
+            #"model = "bad\q""#,
+            "model = 1]",
+            #"models = ["a" "b"]"#,
+            "model = \"a\"\nmodel = \"b\"",
+            "[profile]\n[profile]",
+            "model = \"a\" nonsense",
+            "model = definitely-not-a-value",
+            "profile = { model = \"a\""
+        ]
+    )
+    func refusesMalformedTOML(original: String) {
+        #expect(throws: MCPClientInstall.TOMLConfigError.self) {
+            try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+        }
+    }
+
     @Test func ignoresHeaderLikeTextInsideMultilineValues() throws {
         let original = #"""
         notes = """

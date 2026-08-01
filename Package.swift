@@ -11,9 +11,15 @@ let package = Package(
     products: [
         .library(name: "MCPClientInstall", targets: ["MCPClientInstall"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/mattt/swift-toml.git", from: "2.0.0")
+    ],
     targets: [
         .target(
             name: "MCPClientInstall",
+            dependencies: [
+                .product(name: "TOML", package: "swift-toml")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]
