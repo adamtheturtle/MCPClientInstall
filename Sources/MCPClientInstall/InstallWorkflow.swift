@@ -11,6 +11,7 @@ public extension MCPClientInstall {
     enum InstallWorkflowError: Error, Equatable, Sendable {
         case unsafePath(url: URL, kind: ConfigPathKind)
         case readFailed(url: URL, detail: String)
+        case configurationTooLarge(url: URL, limit: Int)
         case invalidConfiguration(url: URL, detail: String)
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
@@ -62,6 +63,8 @@ public extension MCPClientInstall {
                 )
             } catch let error as JSONConfigError {
                 throw InstallWorkflowError.invalidConfiguration(url: url, detail: String(describing: error))
+            } catch let ConfigurationReadError.tooLarge(limit) {
+                throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
             } catch let error as CocoaError {
                 throw InstallWorkflowError.invalidConfiguration(url: url, detail: error.localizedDescription)
             } catch {
@@ -72,6 +75,8 @@ public extension MCPClientInstall {
             let text: String
             do {
                 text = try existingTOML(at: url)
+            } catch let ConfigurationReadError.tooLarge(limit) {
+                throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
             } catch {
                 throw InstallWorkflowError.readFailed(url: url, detail: error.localizedDescription)
             }
@@ -178,7 +183,7 @@ extension MCPClientInstall {
 
     private static func existingTOML(at url: URL) throws -> String {
         guard FileManager.default.fileExists(atPath: url.path) else { return "" }
-        let data = try Data(contentsOf: url)
+        let data = try boundedConfigurationData(at: url)
         guard let text = String(data: data, encoding: .utf8) else {
             throw CocoaError(.fileReadInapplicableStringEncoding)
         }

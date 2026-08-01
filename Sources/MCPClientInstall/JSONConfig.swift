@@ -9,6 +9,12 @@
 import Foundation
 
 public extension MCPClientInstall {
+    static let maxConfigurationFileBytes = 4 * 1024 * 1024
+
+    enum ConfigurationReadError: Error, Equatable, Sendable {
+        case tooLarge(limit: Int)
+    }
+
     /// Thrown when an existing JSON config's `mcpServers` value is present but not
     /// an object, so merging would silently destroy it.
     enum JSONConfigError: Error, Equatable, Sendable {
@@ -27,7 +33,7 @@ public extension MCPClientInstall {
     /// present but not a JSON object.
     static func jsonConfigByAddingServer(
         to root: [String: Any],
-        server: MCPServerSpec
+        server: MCPServerSpec,
     ) throws -> JSONMergeResult {
         var root = root
         var servers: [String: Any]
@@ -69,7 +75,7 @@ public extension MCPClientInstall {
     static func existingJSON(at url: URL) throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
 
-        let data = try Data(contentsOf: url)
+        let data = try boundedConfigurationData(at: url)
         // Whitespace-only counts as blank. A file holding just a newline is empty
         // to the person who made it, and rejecting it as corrupt would refuse to
         // write a config the installer could perfectly well create.
@@ -87,5 +93,20 @@ public extension MCPClientInstall {
     /// Pretty-printed JSON bytes for `root`, with sorted keys for a stable diff.
     static func prettyJSONData(from root: [String: Any]) throws -> Data {
         try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    static func boundedConfigurationData(at url: URL) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var data = Data()
+        while data.count <= maxConfigurationFileBytes {
+            let remaining = maxConfigurationFileBytes + 1 - data.count
+            guard let chunk = try handle.read(upToCount: min(64 * 1024, remaining)), !chunk.isEmpty else { break }
+            data.append(chunk)
+        }
+        guard data.count <= maxConfigurationFileBytes else {
+            throw ConfigurationReadError.tooLarge(limit: maxConfigurationFileBytes)
+        }
+        return data
     }
 }
