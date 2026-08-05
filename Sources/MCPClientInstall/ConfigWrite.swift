@@ -14,14 +14,11 @@ public enum MCPClientInstall {
     /// regular file (not a directory or a dangling symlink), and executable.
     public static func isRunnableExecutable(_ path: String) -> Bool {
         guard !path.isEmpty else { return false }
-
-        var isDirectory: ObjCBool = false
-        let manager = FileManager.default
-        guard manager.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+        let url = URL(fileURLWithPath: path)
+        guard configPathKind(at: url) == .regularFile else {
             return false
         }
-
-        return manager.isExecutableFile(atPath: path)
+        return FileManager.default.isExecutableFile(atPath: path)
     }
 
     /// What is sitting at a config path, so the installer can refuse anything it
@@ -99,7 +96,16 @@ public enum MCPClientInstall {
     public static func writeConfig(_ data: Data, to url: URL, backupSuffix: String) throws {
         let manager = FileManager.default
         guard manager.fileExists(atPath: url.path) else {
-            try data.write(to: url, options: .atomic)
+            let temporary = url.deletingLastPathComponent()
+                .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
+            do {
+                try data.write(to: temporary, options: .atomic)
+                try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+                try manager.moveItem(at: temporary, to: url)
+            } catch {
+                try? manager.removeItem(at: temporary)
+                throw error
+            }
             return
         }
 

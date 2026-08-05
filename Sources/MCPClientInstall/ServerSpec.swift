@@ -7,11 +7,18 @@
 //  any host app can reuse the merge/write machinery unchanged.
 //
 
+import Foundation
+
 /// The server entry written into each client's config file.
 ///
 /// Every field is part of the on-disk payload or of user-facing messaging, so a
 /// host app supplies all of them and the package never invents a product identity.
 public struct MCPServerSpec: Sendable, Equatable {
+    public enum ValidationError: Error, Equatable, Sendable {
+        case blankName
+        case blankCommand
+    }
+
     /// Config key under `mcpServers` / `[mcp_servers.<name>]`, e.g. `"myapp"`.
     public var name: String
     /// Absolute path (or command) the client should launch.
@@ -33,5 +40,14 @@ public struct MCPServerSpec: Sendable, Equatable {
         self.command = command
         self.arguments = arguments
         self.backupSuffix = backupSuffix ?? ".\(name)-mcp-backup"
+    }
+
+    func validate() throws {
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ValidationError.blankName
+        }
+        if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ValidationError.blankCommand
+        }
     }
 }

@@ -1,0 +1,80 @@
+import Foundation
+import Testing
+
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
+@testable import MCPClientInstall
+
+@Suite("Input and file safety")
+struct InputSafetyTests {
+    @Test func refusesInvalidObjectsBeforeFoundationSerialization() {
+        #expect(throws: MCPClientInstall.JSONConfigError.invalidJSONObject) {
+            try MCPClientInstall.prettyJSONData(from: ["nested": [Date()]])
+        }
+        #expect(throws: MCPClientInstall.JSONConfigError.invalidJSONObject) {
+            try MCPClientInstall.prettyJSONData(from: ["number": Double.nan])
+        }
+    }
+
+    @Test func rejectsBlankServerIdentityAndCommandForEveryFormat() {
+        #expect(throws: MCPServerSpec.ValidationError.blankName) {
+            try addingMCPServer(MCPServerSpec(name: " \n", command: "/demo"), toJSON: [:])
+        }
+        #expect(throws: MCPServerSpec.ValidationError.blankCommand) {
+            try addingMCPServer(MCPServerSpec(name: "demo", command: "\t"), toJSON: [:])
+        }
+        #expect(throws: MCPServerSpec.ValidationError.blankName) {
+            try addingMCPServer(MCPServerSpec(name: " ", command: "/demo"), toCodexTOML: "")
+        }
+        #expect(throws: MCPServerSpec.ValidationError.blankCommand) {
+            try addingMCPServer(MCPServerSpec(name: "demo", command: "\n"), toCodexTOML: "")
+        }
+    }
+
+    @Test func executableSymlinksAreNotRunnable() throws {
+        let directory = temporaryDirectory()
+        let executable = directory.appendingPathComponent("tool")
+        let link = directory.appendingPathComponent("tool-link")
+        try Data("#!/bin/sh\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: executable.path
+        )
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: executable)
+
+        #expect(MCPClientInstall.isRunnableExecutable(executable.path))
+        #expect(!MCPClientInstall.isRunnableExecutable(link.path))
+    }
+
+    @Test func boundedReadsRejectAFIFOBeforeOpeningIt() throws {
+        let fifo = temporaryDirectory().appendingPathComponent("config.fifo")
+        #expect(mkfifo(fifo.path, 0o600) == 0)
+
+        #expect(throws: MCPClientInstall.ConfigurationReadError.unsafePath(.special)) {
+            try MCPClientInstall.boundedConfigurationData(at: fifo)
+        }
+    }
+
+    @Test func refusesAnOversizedPreparedConfigurationWithoutWriting() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        let oversized = MCPServerSpec(
+            name: "demo",
+            command: String(repeating: "x", count: MCPClientInstall.maxConfigurationFileBytes)
+        )
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.self) {
+            try MCPClientInstall.installServer(oversized, format: .json, at: file)
+        }
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
+    private func temporaryDirectory() -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+}
