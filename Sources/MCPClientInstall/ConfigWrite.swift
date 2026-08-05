@@ -9,6 +9,10 @@
 
 import Foundation
 
+#if os(Linux)
+import Glibc
+#endif
+
 public enum MCPClientInstall {
     /// Whether `path` is something the client can actually execute: present, a
     /// regular file (not a directory or a dangling symlink), and executable.
@@ -103,12 +107,12 @@ public enum MCPClientInstall {
     /// what was there under `backupSuffix`.
     ///
     /// A plain atomic write creates a fresh file and renames it over the target,
-    /// which silently drops the original's POSIX mode, ACLs, and extended
-    /// attributes — so updating a deliberately protected config could weaken or
-    /// break its access setup. `replaceItemAt` carries that metadata onto the
-    /// replacement instead, and its `backupItemName` leaves the previous contents
-    /// beside the file so a rewrite defect or an interrupted write is recoverable
-    /// rather than final.
+    /// which silently drops the original's metadata. On Apple platforms,
+    /// `replaceItemAt` carries that metadata onto the replacement. Linux preserves
+    /// POSIX permissions, but Foundation cannot portably retain ACLs, ownership, or
+    /// extended attributes; callers relying on those should reapply them after a
+    /// successful write. Both paths leave the previous contents beside the file so
+    /// a rewrite defect or interrupted write is recoverable rather than final.
     ///
     /// A file that doesn't exist yet has no metadata to keep and nothing to back
     /// up, so it takes the plain write.
@@ -153,8 +157,10 @@ public enum MCPClientInstall {
 
 #if os(Linux)
     /// Foundation's `replaceItemAt` is unavailable as a reliable transactional
-    /// primitive on Linux. Rename the current file aside, install the prepared
-    /// file, and roll both the current and pre-existing backup back on failure.
+    /// primitive on Linux. Copy the current file to the recoverable backup, then
+    /// atomically rename the prepared file over the still-live path. At every crash
+    /// point the live path therefore names either the complete old or complete new
+    /// configuration.
     private static func replaceConfigOnLinux(
         at url: URL,
         with temporary: URL,
@@ -166,7 +172,8 @@ public enum MCPClientInstall {
         let previousBackup = directory
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).previous-backup")
         var parkedPreviousBackup = false
-        var parkedCurrent = false
+        var createdBackup = false
+        var installedCurrent = false
 
         do {
             if manager.fileExists(atPath: backup.path) {
@@ -177,9 +184,12 @@ public enum MCPClientInstall {
             if let permissions = try manager.attributesOfItem(atPath: url.path)[.posixPermissions] {
                 try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: temporary.path)
             }
-            try manager.moveItem(at: url, to: backup)
-            parkedCurrent = true
-            try manager.moveItem(at: temporary, to: url)
+            try manager.copyItem(at: url, to: backup)
+            createdBackup = true
+            try syncFile(at: temporary)
+            try renameReplacing(temporary, with: url)
+            installedCurrent = true
+            try syncDirectory(at: directory)
 
             if parkedPreviousBackup {
                 try manager.removeItem(at: previousBackup)
@@ -188,14 +198,41 @@ public enum MCPClientInstall {
             if manager.fileExists(atPath: temporary.path) {
                 try? manager.removeItem(at: temporary)
             }
-            if parkedCurrent, !manager.fileExists(atPath: url.path) {
-                try? manager.moveItem(at: backup, to: url)
+            if !installedCurrent, createdBackup, manager.fileExists(atPath: backup.path) {
+                try? manager.removeItem(at: backup)
             }
-            if parkedPreviousBackup, !manager.fileExists(atPath: backup.path) {
+            if !installedCurrent, parkedPreviousBackup, !manager.fileExists(atPath: backup.path) {
                 try? manager.moveItem(at: previousBackup, to: backup)
             }
             throw error
         }
+    }
+
+    private static func renameReplacing(_ source: URL, with destination: URL) throws {
+        let result = source.path.withCString { sourcePath in
+            destination.path.withCString { destinationPath in
+                Glibc.rename(sourcePath, destinationPath)
+            }
+        }
+        guard result == 0 else { throw posixError() }
+    }
+
+    private static func syncFile(at url: URL) throws {
+        let descriptor = url.path.withCString { Glibc.open($0, O_RDONLY) }
+        guard descriptor >= 0 else { throw posixError() }
+        defer { _ = Glibc.close(descriptor) }
+        guard Glibc.fsync(descriptor) == 0 else { throw posixError() }
+    }
+
+    private static func syncDirectory(at url: URL) throws {
+        let descriptor = url.path.withCString { Glibc.open($0, O_RDONLY | O_DIRECTORY) }
+        guard descriptor >= 0 else { throw posixError() }
+        defer { _ = Glibc.close(descriptor) }
+        guard Glibc.fsync(descriptor) == 0 else { throw posixError() }
+    }
+
+    private static func posixError() -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(Glibc.errno))
     }
 #endif
 }
