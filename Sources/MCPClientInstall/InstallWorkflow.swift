@@ -13,6 +13,7 @@ public extension MCPClientInstall {
         case readFailed(url: URL, detail: String)
         case configurationTooLarge(url: URL, limit: Int)
         case invalidConfiguration(url: URL, detail: String)
+        case invalidServer(MCPServerSpec.ValidationError)
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
@@ -62,8 +63,9 @@ public extension MCPClientInstall {
                     format: format,
                     alreadyPresent: merged.alreadyPresent,
                 )
-            } catch let error as InstallWorkflowError {
-                throw error
+            } catch let error as InstallWorkflowError { throw error
+            } catch let error as MCPServerSpec.ValidationError {
+                throw InstallWorkflowError.invalidServer(error)
             } catch let error as JSONConfigError {
                 throw InstallWorkflowError.invalidConfiguration(url: url, detail: String(describing: error))
             } catch let ConfigurationReadError.tooLarge(limit) {
@@ -92,6 +94,8 @@ public extension MCPClientInstall {
                 )
             } catch let error as InstallWorkflowError {
                 throw error
+            } catch let error as MCPServerSpec.ValidationError {
+                throw InstallWorkflowError.invalidServer(error)
             } catch {
                 throw InstallWorkflowError.invalidConfiguration(url: url, detail: error.localizedDescription)
             }
