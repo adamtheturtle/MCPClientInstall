@@ -4,6 +4,8 @@ func splitTOMLKeyPath(_ value: String) -> [String]? {
     var result: [String] = []
     var current = ""
     var quote: Character?
+    var quotedComponent = false
+    var closedQuote = false
     var index = value.startIndex
 
     while index < value.endIndex {
@@ -16,16 +18,24 @@ func splitTOMLKeyPath(_ value: String) -> [String]? {
                 continue
             } else if character == activeQuote {
                 quote = nil
+                closedQuote = true
             } else {
                 current.append(character)
             }
         } else if character == "\"" || character == "'" {
+            guard current.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            current = ""
             quote = character
+            quotedComponent = true
         } else if character == "." {
-            let key = current.trimmingCharacters(in: .whitespaces)
+            let key = quotedComponent ? current : current.trimmingCharacters(in: .whitespaces)
             guard !key.isEmpty else { return nil }
             result.append(key)
             current = ""
+            quotedComponent = false
+            closedQuote = false
+        } else if closedQuote {
+            guard character.isWhitespace else { return nil }
         } else {
             current.append(character)
         }
@@ -33,7 +43,7 @@ func splitTOMLKeyPath(_ value: String) -> [String]? {
     }
 
     guard quote == nil else { return nil }
-    let key = current.trimmingCharacters(in: .whitespaces)
+    let key = quotedComponent ? current : current.trimmingCharacters(in: .whitespaces)
     guard !key.isEmpty else { return nil }
     result.append(key)
     return result

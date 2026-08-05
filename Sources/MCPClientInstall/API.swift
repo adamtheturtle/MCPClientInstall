@@ -79,13 +79,5 @@ public func mcpServerIsConfigured(
     _ server: MCPServerSpec,
     inCodexTOML text: String
 ) -> Bool {
-    let scan = MCPClientInstall.scanCodexConfig(text, serverName: server.name)
-    guard scan.declaration == .table, let range = scan.tableLineRange else { return false }
-
-    let table = scan.lines[range].map { $0.trimmingCharacters(in: .whitespaces) }
-    let arguments = server.arguments
-        .map(MCPClientInstall.tomlBasicString)
-        .joined(separator: ", ")
-    return table.contains("command = \(MCPClientInstall.tomlBasicString(server.command))")
-        && table.contains("args = [\(arguments)]")
+    MCPClientInstall.codexServerIsConfigured(server, in: text)
 }

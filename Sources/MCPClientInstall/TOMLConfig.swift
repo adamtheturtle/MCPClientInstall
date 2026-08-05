@@ -63,6 +63,13 @@ public extension MCPClientInstall {
         """
     }
 
+    static func codexServerIsConfigured(_ server: MCPServerSpec, in text: String) -> Bool {
+        guard let document = try? TOMLDecoder().decode(CodexServerDocument.self, from: text),
+              let configured = document.servers?[server.name]
+        else { return false }
+        return configured.command == server.command && configured.arguments == server.arguments
+    }
+
     /// Scans for declarations of `serverName` without interpreting apparent
     /// headers inside multiline strings or arrays.
     static func scanCodexConfig(_ text: String, serverName: String) -> TOMLScan {
@@ -256,6 +263,24 @@ public extension MCPClientInstall {
 }
 
 private struct TOMLValidationDocument: Decodable {}
+
+private struct CodexServerDocument: Decodable {
+    let servers: [String: CodexServerValues]?
+
+    private enum CodingKeys: String, CodingKey {
+        case servers = "mcp_servers"
+    }
+}
+
+private struct CodexServerValues: Decodable {
+    let command: String?
+    let arguments: [String]?
+
+    private enum CodingKeys: String, CodingKey {
+        case command
+        case arguments = "args"
+    }
+}
 
 private struct TOMLLineState {
     private enum StringState { case none, multilineBasic, multilineLiteral }
