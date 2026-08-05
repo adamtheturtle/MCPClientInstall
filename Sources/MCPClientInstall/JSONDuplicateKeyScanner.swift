@@ -25,6 +25,9 @@ private struct JSONDuplicateKeyScanner {
     var index = 0
 
     mutating func scan() throws {
+        if bytes.starts(with: [0xEF, 0xBB, 0xBF]) {
+            index = 3
+        }
         skipWhitespace()
         try parseValue(depth: 0)
         skipWhitespace()

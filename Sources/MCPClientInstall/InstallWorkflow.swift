@@ -231,6 +231,7 @@ extension MCPClientInstall {
         }
         let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
         guard verified else {
+            var remainingBackupURL = backupURL
             do {
                 if existed {
                     let restored = try restoreBackup(
@@ -240,6 +241,7 @@ extension MCPClientInstall {
                         displacedSuffix: ".verification-failed-\(UUID().uuidString)",
                         moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
                     )
+                    remainingBackupURL = nil
                     if let displacedURL = restored.displacedURL {
                         try removeItem(displacedURL)
                     }
@@ -248,7 +250,7 @@ extension MCPClientInstall {
                 }
             } catch {
                 throw InstallWorkflowError.verificationRollbackFailed(
-                    url: url, backupURL: backupURL, detail: error.localizedDescription
+                    url: url, backupURL: remainingBackupURL, detail: error.localizedDescription
                 )
             }
             throw InstallWorkflowError.verificationFailed(url: url, backupURL: nil)

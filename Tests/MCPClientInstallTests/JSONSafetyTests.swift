@@ -31,6 +31,16 @@ struct JSONSafetyTests {
         }
     }
 
+    @Test func byteOrderMarkDoesNotBypassDuplicateKeyDetection() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        let byteOrderMark = Data([0xEF, 0xBB, 0xBF])
+        try (byteOrderMark + Data(#"{"command":"a","command":"b"}"#.utf8)).write(to: file)
+
+        #expect(throws: MCPClientInstall.JSONConfigError.duplicateKey("command")) {
+            try MCPClientInstall.existingJSON(at: file)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
