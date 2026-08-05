@@ -35,12 +35,28 @@ public enum MCPClientInstall {
         /// produces confusing or destructive behaviour, and a FIFO can block the UI
         /// outright.
         case special
+        /// The path could not be classified. This is distinct from absence so a
+        /// permissions or I/O failure can never be treated as permission to create.
+        case unavailable(detail: String)
+    }
+
+    public enum ConfigWriteError: Error, Equatable, Sendable {
+        case unsafeBackupSuffix(String)
     }
 
     /// Classifies the config path without following symlinks.
     public static func configPathKind(at url: URL) -> ConfigPathKind {
         let manager = FileManager.default
-        guard let attributes = try? manager.attributesOfItem(atPath: url.path) else { return .absent }
+        let attributes: [FileAttributeKey: Any]
+        do {
+            attributes = try manager.attributesOfItem(atPath: url.path)
+        } catch let error as NSError {
+            if error.domain == NSCocoaErrorDomain,
+               error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError {
+                return .absent
+            }
+            return .unavailable(detail: error.localizedDescription)
+        }
         guard let type = attributes[.type] as? FileAttributeType else { return .special }
 
         switch type {
@@ -77,6 +93,9 @@ public enum MCPClientInstall {
             \(fileName) isn't a regular file, so it can't be read or replaced. \
             Check what's at that path and try again.
             """
+
+        case let .unavailable(detail):
+            "\(fileName) could not be inspected safely: \(detail)"
         }
     }
 
@@ -94,6 +113,9 @@ public enum MCPClientInstall {
     /// A file that doesn't exist yet has no metadata to keep and nothing to back
     /// up, so it takes the plain write.
     public static func writeConfig(_ data: Data, to url: URL, backupSuffix: String) throws {
+        guard isSafeFilenameSuffix(backupSuffix) else {
+            throw ConfigWriteError.unsafeBackupSuffix(backupSuffix)
+        }
         let manager = FileManager.default
         guard manager.fileExists(atPath: url.path) else {
             let temporary = url.deletingLastPathComponent()
