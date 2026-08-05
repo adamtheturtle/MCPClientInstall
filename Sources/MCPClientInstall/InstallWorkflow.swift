@@ -132,7 +132,11 @@ public extension MCPClientInstall {
         displacedSuffix: String,
     ) throws -> RestoreWorkflowResult {
         let manager = FileManager.default
-        try server.validate()
+        do {
+            try server.validate()
+        } catch let error as MCPServerSpec.ValidationError {
+            throw InstallWorkflowError.invalidServer(error)
+        }
         let backupURL = try sibling(of: url, suffix: server.backupSuffix)
         guard configPathKind(at: backupURL) == .regularFile else {
             throw InstallWorkflowError.backupUnavailable(url: backupURL)
