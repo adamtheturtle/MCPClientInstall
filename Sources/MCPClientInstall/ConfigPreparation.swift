@@ -2,7 +2,11 @@ import Foundation
 
 extension MCPClientInstall {
     /// Prepares a complete JSON or Codex TOML update without writing it.
-    static func prepareServerUpdate(
+    ///
+    /// The returned preview reflects the file at the time it was read. Call
+    /// ``installServer(_:format:at:)`` to perform the update; installation
+    /// re-prepares the configuration while holding its transaction lock.
+    public static func prepareServerUpdate(
         _ server: MCPServerSpec,
         format: ConfigurationFormat,
         at url: URL,
