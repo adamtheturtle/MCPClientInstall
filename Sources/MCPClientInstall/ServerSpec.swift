@@ -17,6 +17,7 @@ public struct MCPServerSpec: Sendable, Equatable {
     public enum ValidationError: Error, Equatable, Sendable {
         case blankName
         case blankCommand
+        case unsafeBackupSuffix(String)
     }
 
     /// Config key under `mcpServers` / `[mcp_servers.<name>]`, e.g. `"myapp"`.
@@ -49,5 +50,16 @@ public struct MCPServerSpec: Sendable, Equatable {
         if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw ValidationError.blankCommand
         }
+        guard isSafeFilenameSuffix(backupSuffix) else {
+            throw ValidationError.unsafeBackupSuffix(backupSuffix)
+        }
     }
+}
+
+func isSafeFilenameSuffix(_ suffix: String) -> Bool {
+    !suffix.isEmpty
+        && suffix != "."
+        && suffix != ".."
+        && !suffix.contains("/")
+        && !suffix.contains("\\")
 }

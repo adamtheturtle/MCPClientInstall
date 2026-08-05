@@ -18,6 +18,7 @@ public extension MCPClientInstall {
         case verificationFailed(url: URL, backupURL: URL?)
         case backupUnavailable(url: URL)
         case displacedFileExists(url: URL)
+        case unsafeSiblingSuffix(String)
         case restorationFailed(url: URL, detail: String)
     }
 
@@ -127,7 +128,8 @@ public extension MCPClientInstall {
         displacedSuffix: String,
     ) throws -> RestoreWorkflowResult {
         let manager = FileManager.default
-        let backupURL = sibling(of: url, suffix: server.backupSuffix)
+        try server.validate()
+        let backupURL = try sibling(of: url, suffix: server.backupSuffix)
         guard configPathKind(at: backupURL) == .regularFile else {
             throw InstallWorkflowError.backupUnavailable(url: backupURL)
         }
@@ -145,7 +147,7 @@ public extension MCPClientInstall {
             }
         }
 
-        let displacedURL = sibling(of: url, suffix: displacedSuffix)
+        let displacedURL = try sibling(of: url, suffix: displacedSuffix)
         guard configPathKind(at: displacedURL) == .absent else {
             throw InstallWorkflowError.displacedFileExists(url: displacedURL)
         }
@@ -184,7 +186,7 @@ extension MCPClientInstall {
         } else {
             verifyServer(server, format: format, at: url)
         }
-        let backupURL = existed ? sibling(of: url, suffix: server.backupSuffix) : nil
+        let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
         guard verified else {
             throw InstallWorkflowError.verificationFailed(url: url, backupURL: backupURL)
         }
@@ -215,7 +217,17 @@ extension MCPClientInstall {
         }
     }
 
-    private static func sibling(of url: URL, suffix: String) -> URL {
-        url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + suffix)
+    private static func sibling(of url: URL, suffix: String) throws -> URL {
+        guard isSafeFilenameSuffix(suffix) else {
+            throw InstallWorkflowError.unsafeSiblingSuffix(suffix)
+        }
+        let directory = url.deletingLastPathComponent().standardizedFileURL
+        let candidate = directory
+            .appendingPathComponent(url.lastPathComponent + suffix)
+            .standardizedFileURL
+        guard candidate.deletingLastPathComponent() == directory else {
+            throw InstallWorkflowError.unsafeSiblingSuffix(suffix)
+        }
+        return candidate
     }
 }

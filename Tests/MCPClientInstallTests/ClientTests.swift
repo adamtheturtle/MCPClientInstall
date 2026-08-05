@@ -11,18 +11,18 @@ struct ClientTests {
         #expect(MCPDesktopClient.cursor.id == MCPDesktopClient.cursor.rawValue)
     }
 
-    @Test func `configuration locations are relative to a caller supplied home`() {
+    @Test func `configuration locations are relative to a caller supplied home`() throws {
         let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
 
         let desktop = MCPDesktopClient.claudeDesktop.configurationLocation
-        #expect(desktop.directory(relativeTo: home).path == "/Users/example/Library/Application Support/Claude")
-        #expect(desktop.fallbackDirectory(relativeTo: home).path == "/Users/example/Library/Application Support")
+        #expect(try desktop.directory(relativeTo: home).path == "/Users/example/Library/Application Support/Claude")
+        #expect(try desktop.fallbackDirectory(relativeTo: home).path == "/Users/example/Library/Application Support")
         #expect(desktop.fileName == "claude_desktop_config.json")
         #expect(desktop.format == .json)
 
         let codex = MCPDesktopClient.codex.configurationLocation
-        #expect(codex.directory(relativeTo: home).path == "/Users/example/.codex")
-        #expect(codex.fallbackDirectory(relativeTo: home) == home)
+        #expect(try codex.directory(relativeTo: home).path == "/Users/example/.codex")
+        #expect(try codex.fallbackDirectory(relativeTo: home) == home)
         #expect(codex.fileName == "config.toml")
         #expect(codex.format == .codexTOML)
     }

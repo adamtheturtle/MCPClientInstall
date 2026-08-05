@@ -16,6 +16,11 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
     case codex
     case cursor
 
+    public enum ConfigurationLocationError: Error, Equatable, Sendable {
+        case unsafeDirectoryComponent(String)
+        case outsideHomeDirectory(URL)
+    }
+
     public var id: String { rawValue }
 
     /// The client's human-facing name, shown as a tab title or button label.
@@ -50,16 +55,35 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
             self.format = format
         }
 
-        public func directory(relativeTo homeDirectory: URL) -> URL {
-            directoryComponents.reduce(homeDirectory) {
-                $0.appendingPathComponent($1, isDirectory: true)
-            }
+        public func directory(relativeTo homeDirectory: URL) throws -> URL {
+            try safeDirectory(components: directoryComponents, relativeTo: homeDirectory)
         }
 
-        public func fallbackDirectory(relativeTo homeDirectory: URL) -> URL {
-            fallbackDirectoryComponents.reduce(homeDirectory) {
-                $0.appendingPathComponent($1, isDirectory: true)
+        public func fallbackDirectory(relativeTo homeDirectory: URL) throws -> URL {
+            try safeDirectory(components: fallbackDirectoryComponents, relativeTo: homeDirectory)
+        }
+
+        private func safeDirectory(components: [String], relativeTo homeDirectory: URL) throws -> URL {
+            for component in components where !Self.isSafeDirectoryComponent(component) {
+                throw ConfigurationLocationError.unsafeDirectoryComponent(component)
             }
+            let home = homeDirectory.standardizedFileURL
+            let candidate = components.reduce(home) {
+                $0.appendingPathComponent($1, isDirectory: true)
+            }.standardizedFileURL
+            let homePath = home.path.hasSuffix("/") ? home.path : home.path + "/"
+            guard candidate == home || candidate.path.hasPrefix(homePath) else {
+                throw ConfigurationLocationError.outsideHomeDirectory(candidate)
+            }
+            return candidate
+        }
+
+        private static func isSafeDirectoryComponent(_ component: String) -> Bool {
+            !component.isEmpty
+                && component != "."
+                && component != ".."
+                && !component.contains("/")
+                && !component.contains("\\")
         }
     }
 
