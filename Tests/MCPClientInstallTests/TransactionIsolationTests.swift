@@ -69,7 +69,7 @@ struct TransactionIsolationTests {
         try Data(#"{"secret":"unchanged"}"#.utf8).write(to: attacker)
 
         do {
-            try MCPClientInstall.installServer(
+            _ = try MCPClientInstall.installServer(
                 MCPServerSpec(name: "demo", command: "/demo"),
                 format: .json,
                 at: file,
