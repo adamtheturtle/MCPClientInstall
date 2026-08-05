@@ -58,6 +58,7 @@ struct InputSafetyTests {
         do {
             _ = try MCPClientInstall.restoreBackup(
                 for: MCPServerSpec(name: " ", command: "/demo"),
+                format: .json,
                 at: file,
                 displacedSuffix: ".displaced"
             )
