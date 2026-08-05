@@ -22,6 +22,7 @@ struct RestoreSafetyTests {
 
     @Test func rollbackRemovalFailuresAreReportedDistinctly() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data("{}".utf8).write(to: file)
 
         do {
             _ = try MCPClientInstall.installServer(
@@ -33,12 +34,13 @@ struct RestoreSafetyTests {
             )
             Issue.record("Expected rollback failure")
         } catch let error as MCPClientInstall.InstallWorkflowError {
-            guard case .verificationRollbackFailed = error else {
+            guard case let .verificationRollbackFailed(_, backupURL, _) = error else {
                 Issue.record("Unexpected error: \(error)")
                 return
             }
+            #expect(backupURL == nil)
         }
-        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(try String(contentsOf: file, encoding: .utf8) == "{}")
     }
 
     @Test(

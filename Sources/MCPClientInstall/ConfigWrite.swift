@@ -189,7 +189,6 @@ public enum MCPClientInstall {
         let previousBackup = directory
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).previous-backup")
         var parkedPreviousBackup = false
-        var createdBackup = false
         var installedCurrent = false
 
         do {
@@ -203,7 +202,6 @@ public enum MCPClientInstall {
                 try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: temporary.path)
             }
             try manager.copyItem(at: url, to: backup)
-            createdBackup = true
             try syncFile(at: temporary)
             try beforeReplacing()
             try renameReplacing(temporary, with: url)
@@ -217,7 +215,7 @@ public enum MCPClientInstall {
             if manager.fileExists(atPath: temporary.path) {
                 try? manager.removeItem(at: temporary)
             }
-            if !installedCurrent, createdBackup, manager.fileExists(atPath: backup.path) {
+            if !installedCurrent, manager.fileExists(atPath: backup.path) {
                 try? manager.removeItem(at: backup)
             }
             if !installedCurrent, parkedPreviousBackup, !manager.fileExists(atPath: backup.path) {
