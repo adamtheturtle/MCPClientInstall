@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-
 @testable import MCPClientInstall
 
 @Suite("JSON configuration")
@@ -98,6 +97,7 @@ struct JSONConfigTests {
             try MCPClientInstall.existingJSON(at: file)
         }
     }
+
 }
 
 @Suite("Codex TOML configuration")
@@ -266,6 +266,7 @@ struct TOMLConfigTests {
             inCodexTOML: merged.text
         ))
     }
+
 }
 
 @Suite("Configuration paths")
@@ -279,6 +280,7 @@ struct ConfigPathTests {
         try Data("{}".utf8).write(to: file)
         #expect(MCPClientInstall.configPathKind(at: file) == .regularFile)
     }
+
 }
 
 @Suite("Transactional installation")
@@ -296,6 +298,9 @@ struct InstallWorkflowTests {
 
         #expect(result.backupURL == nil)
         #expect(mcpServerIsConfigured(server, inJSON: try readMCPJSONConfiguration(at: file)))
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+        #expect(permissions.intValue & 0o777 == 0o600)
     }
 
     @Test func installsAbsentCodexTOMLAndVerifiesIt() throws {

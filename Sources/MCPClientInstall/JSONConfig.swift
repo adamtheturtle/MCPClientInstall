@@ -13,6 +13,7 @@ public extension MCPClientInstall {
 
     enum ConfigurationReadError: Error, Equatable, Sendable {
         case tooLarge(limit: Int)
+        case unsafePath(ConfigPathKind)
     }
 
     /// Thrown when an existing JSON config's `mcpServers` value is present but not
@@ -20,6 +21,7 @@ public extension MCPClientInstall {
     enum JSONConfigError: Error, Equatable, Sendable {
         case incompatibleMCPServers
         case incompatibleServer(name: String)
+        case invalidJSONObject
     }
 
     /// Result of merging a server into a JSON root object.
@@ -35,6 +37,7 @@ public extension MCPClientInstall {
         to root: [String: Any],
         server: MCPServerSpec,
     ) throws -> JSONMergeResult {
+        try server.validate()
         var root = root
         var servers: [String: Any]
         if let existing = root["mcpServers"] {
@@ -92,10 +95,17 @@ public extension MCPClientInstall {
 
     /// Pretty-printed JSON bytes for `root`, with sorted keys for a stable diff.
     static func prettyJSONData(from root: [String: Any]) throws -> Data {
-        try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        guard JSONSerialization.isValidJSONObject(root) else {
+            throw JSONConfigError.invalidJSONObject
+        }
+        return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
     }
 
     static func boundedConfigurationData(at url: URL) throws -> Data {
+        let kind = configPathKind(at: url)
+        guard kind == .regularFile else {
+            throw ConfigurationReadError.unsafePath(kind)
+        }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var data = Data()

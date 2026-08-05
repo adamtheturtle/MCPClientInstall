@@ -13,6 +13,7 @@ public extension MCPClientInstall {
         case readFailed(url: URL, detail: String)
         case configurationTooLarge(url: URL, limit: Int)
         case invalidConfiguration(url: URL, detail: String)
+        case invalidServer(MCPServerSpec.ValidationError)
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
@@ -56,11 +57,14 @@ public extension MCPClientInstall {
             do {
                 let root = try existingJSON(at: url)
                 let merged = try jsonConfigByAddingServer(to: root, server: server)
-                return try PreparedConfigUpdate(
-                    data: prettyJSONData(from: merged.root),
+                return PreparedConfigUpdate(
+                    data: try boundedPreparedData(prettyJSONData(from: merged.root), at: url),
                     format: format,
                     alreadyPresent: merged.alreadyPresent,
                 )
+            } catch let error as InstallWorkflowError { throw error
+            } catch let error as MCPServerSpec.ValidationError {
+                throw InstallWorkflowError.invalidServer(error)
             } catch let error as JSONConfigError {
                 throw InstallWorkflowError.invalidConfiguration(url: url, detail: String(describing: error))
             } catch let ConfigurationReadError.tooLarge(limit) {
@@ -83,14 +87,27 @@ public extension MCPClientInstall {
             do {
                 let merged = try codexConfigByAddingServer(to: text, server: server)
                 return PreparedConfigUpdate(
-                    data: Data(merged.text.utf8),
+                    data: try boundedPreparedData(Data(merged.text.utf8), at: url),
                     format: format,
                     alreadyPresent: merged.alreadyPresent,
                 )
+            } catch let error as InstallWorkflowError {
+                throw error
+            } catch let error as MCPServerSpec.ValidationError {
+                throw InstallWorkflowError.invalidServer(error)
             } catch {
                 throw InstallWorkflowError.invalidConfiguration(url: url, detail: error.localizedDescription)
             }
         }
+    }
+
+    private static func boundedPreparedData(_ data: Data, at url: URL) throws -> Data {
+        guard data.count <= maxConfigurationFileBytes else {
+            throw InstallWorkflowError.configurationTooLarge(
+                url: url, limit: maxConfigurationFileBytes
+            )
+        }
+        return data
     }
 
     /// Prepares, safely replaces, reads back, and verifies one server entry.
