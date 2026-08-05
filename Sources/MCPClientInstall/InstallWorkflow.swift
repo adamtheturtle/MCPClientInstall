@@ -222,6 +222,8 @@ extension MCPClientInstall {
                 backupSuffix: server.backupSuffix,
                 beforeReplacing: { try requireUnchanged(prepared.sourceIdentity, at: url) }
             )
+        } catch let error as InstallWorkflowError {
+            throw error
         } catch {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }

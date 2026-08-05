@@ -68,7 +68,7 @@ struct TransactionIsolationTests {
         try Data("{}".utf8).write(to: file)
         try Data(#"{"secret":"unchanged"}"#.utf8).write(to: attacker)
 
-        #expect(throws: MCPClientInstall.InstallWorkflowError.self) {
+        do {
             try MCPClientInstall.installServer(
                 MCPServerSpec(name: "demo", command: "/demo"),
                 format: .json,
@@ -81,6 +81,13 @@ struct TransactionIsolationTests {
                     )
                 }
             )
+            Issue.record("Expected path swap rejection")
+        } catch let error as MCPClientInstall.InstallWorkflowError {
+            guard case let .unsafePath(unsafeURL, .symbolicLink(destination: _)) = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+            #expect(unsafeURL == file)
         }
         #expect(try String(contentsOf: attacker, encoding: .utf8) == #"{"secret":"unchanged"}"#)
         #expect(try String(contentsOf: parked, encoding: .utf8) == "{}")
