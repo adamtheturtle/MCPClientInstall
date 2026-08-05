@@ -202,6 +202,8 @@ public enum MCPClientInstall {
                 try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: temporary.path)
             }
             try manager.copyItem(at: url, to: backup)
+            try syncFile(at: backup)
+            try syncDirectory(at: directory)
             try syncFile(at: temporary)
             try beforeReplacing()
             try renameReplacing(temporary, with: url)
@@ -210,6 +212,7 @@ public enum MCPClientInstall {
 
             if parkedPreviousBackup {
                 try manager.removeItem(at: previousBackup)
+                try syncDirectory(at: directory)
             }
         } catch {
             if manager.fileExists(atPath: temporary.path) {
