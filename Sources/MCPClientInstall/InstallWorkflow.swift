@@ -215,9 +215,13 @@ extension MCPClientInstall {
         let existed = configPathKind(at: url) == .regularFile
         let prepared = try prepareServerUpdate(server, format: format, at: url)
         hooks.afterPrepare?()
-        try requireUnchanged(prepared.sourceIdentity, at: url)
         do {
-            try writeConfig(prepared.data, to: url, backupSuffix: server.backupSuffix)
+            try writeConfig(
+                prepared.data,
+                to: url,
+                backupSuffix: server.backupSuffix,
+                beforeReplacing: { try requireUnchanged(prepared.sourceIdentity, at: url) }
+            )
         } catch {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }

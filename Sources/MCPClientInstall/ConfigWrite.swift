@@ -117,6 +117,15 @@ public enum MCPClientInstall {
     /// A file that doesn't exist yet has no metadata to keep and nothing to back
     /// up, so it takes the plain write.
     public static func writeConfig(_ data: Data, to url: URL, backupSuffix: String) throws {
+        try writeConfig(data, to: url, backupSuffix: backupSuffix, beforeReplacing: {})
+    }
+
+    static func writeConfig(
+        _ data: Data,
+        to url: URL,
+        backupSuffix: String,
+        beforeReplacing: () throws -> Void
+    ) throws {
         guard isSafeFilenameSuffix(backupSuffix) else {
             throw ConfigWriteError.unsafeBackupSuffix(backupSuffix)
         }
@@ -127,6 +136,7 @@ public enum MCPClientInstall {
             do {
                 try data.write(to: temporary, options: .atomic)
                 try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+                try beforeReplacing()
                 try manager.moveItem(at: temporary, to: url)
             } catch {
                 try? manager.removeItem(at: temporary)
@@ -139,9 +149,15 @@ public enum MCPClientInstall {
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
         try data.write(to: temporary, options: .atomic)
 #if os(Linux)
-        try replaceConfigOnLinux(at: url, with: temporary, backupSuffix: backupSuffix)
+        try replaceConfigOnLinux(
+            at: url,
+            with: temporary,
+            backupSuffix: backupSuffix,
+            beforeReplacing: beforeReplacing
+        )
 #else
         do {
+            try beforeReplacing()
             _ = try manager.replaceItemAt(
                 url,
                 withItemAt: temporary,
@@ -164,7 +180,8 @@ public enum MCPClientInstall {
     private static func replaceConfigOnLinux(
         at url: URL,
         with temporary: URL,
-        backupSuffix: String
+        backupSuffix: String,
+        beforeReplacing: () throws -> Void
     ) throws {
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
@@ -176,6 +193,7 @@ public enum MCPClientInstall {
         var installedCurrent = false
 
         do {
+            try beforeReplacing()
             if manager.fileExists(atPath: backup.path) {
                 try manager.moveItem(at: backup, to: previousBackup)
                 parkedPreviousBackup = true
@@ -187,6 +205,7 @@ public enum MCPClientInstall {
             try manager.copyItem(at: url, to: backup)
             createdBackup = true
             try syncFile(at: temporary)
+            try beforeReplacing()
             try renameReplacing(temporary, with: url)
             installedCurrent = true
             try syncDirectory(at: directory)
