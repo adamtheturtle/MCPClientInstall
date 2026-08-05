@@ -1,5 +1,11 @@
 import Foundation
 
+private struct InstallHooks {
+    let verificationOverride: (() -> Bool)?
+    let afterPrepare: (() -> Void)?
+    let removeItem: (URL) throws -> Void
+}
+
 public extension MCPClientInstall {
     /// The configuration representation used by a client.
     enum ConfigurationFormat: Equatable, Sendable {
@@ -14,6 +20,8 @@ public extension MCPClientInstall {
         case configurationTooLarge(url: URL, limit: Int)
         case invalidConfiguration(url: URL, detail: String)
         case invalidServer(MCPServerSpec.ValidationError)
+        case configurationChanged(url: URL)
+        case lockFailed(url: URL, detail: String)
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
@@ -33,6 +41,7 @@ public extension MCPClientInstall {
         public let data: Data
         public let format: ConfigurationFormat
         public let alreadyPresent: Bool
+        let sourceIdentity: ConfigurationIdentity
     }
 
     /// The outcome of an installed and read-back-verified server entry.
@@ -45,75 +54,6 @@ public extension MCPClientInstall {
     /// beside the restored file at `displacedURL` for further recovery.
     struct RestoreWorkflowResult: Equatable, Sendable {
         public let displacedURL: URL?
-    }
-
-    /// Prepares a complete JSON or Codex TOML update without writing it.
-    static func prepareServerUpdate(
-        _ server: MCPServerSpec,
-        format: ConfigurationFormat,
-        at url: URL,
-    ) throws -> PreparedConfigUpdate {
-        let kind = configPathKind(at: url)
-        guard kind == .absent || kind == .regularFile else {
-            throw InstallWorkflowError.unsafePath(url: url, kind: kind)
-        }
-
-        switch format {
-        case .json:
-            do {
-                let root = try existingJSON(at: url)
-                let merged = try jsonConfigByAddingServer(to: root, server: server)
-                return PreparedConfigUpdate(
-                    data: try boundedPreparedData(prettyJSONData(from: merged.root), at: url),
-                    format: format,
-                    alreadyPresent: merged.alreadyPresent,
-                )
-            } catch let error as InstallWorkflowError { throw error
-            } catch let error as MCPServerSpec.ValidationError {
-                throw InstallWorkflowError.invalidServer(error)
-            } catch let error as JSONConfigError {
-                throw InstallWorkflowError.invalidConfiguration(url: url, detail: String(describing: error))
-            } catch let ConfigurationReadError.tooLarge(limit) {
-                throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
-            } catch let error as CocoaError {
-                throw InstallWorkflowError.invalidConfiguration(url: url, detail: error.localizedDescription)
-            } catch {
-                throw InstallWorkflowError.serializationFailed(url: url, detail: error.localizedDescription)
-            }
-
-        case .codexTOML:
-            let text: String
-            do {
-                text = try existingTOML(at: url)
-            } catch let ConfigurationReadError.tooLarge(limit) {
-                throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
-            } catch {
-                throw InstallWorkflowError.readFailed(url: url, detail: error.localizedDescription)
-            }
-            do {
-                let merged = try codexConfigByAddingServer(to: text, server: server)
-                return PreparedConfigUpdate(
-                    data: try boundedPreparedData(Data(merged.text.utf8), at: url),
-                    format: format,
-                    alreadyPresent: merged.alreadyPresent,
-                )
-            } catch let error as InstallWorkflowError {
-                throw error
-            } catch let error as MCPServerSpec.ValidationError {
-                throw InstallWorkflowError.invalidServer(error)
-            } catch {
-                throw InstallWorkflowError.invalidConfiguration(url: url, detail: error.localizedDescription)
-            }
-        }
-    }
-
-    private static func boundedPreparedData(_ data: Data, at url: URL) throws -> Data {
-        guard data.count <= maxConfigurationFileBytes else {
-            throw InstallWorkflowError.configurationTooLarge(
-                url: url, limit: maxConfigurationFileBytes
-            )
-        }
-        return data
     }
 
     /// Prepares, safely replaces, reads back, and verifies one server entry.
@@ -214,17 +154,81 @@ extension MCPClientInstall {
         format: ConfigurationFormat,
         at url: URL,
         verificationOverride: (() -> Bool)?,
-        removeItem: (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) },
+    ) throws -> InstallWorkflowResult {
+        try installServer(server, format: format, at: url, hooks: .init(
+            verificationOverride: verificationOverride,
+            afterPrepare: nil,
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        ))
+    }
+
+    static func installServer(
+        _ server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        verificationOverride: (() -> Bool)?,
+        afterPrepare: @escaping () -> Void,
+    ) throws -> InstallWorkflowResult {
+        try installServer(server, format: format, at: url, hooks: .init(
+            verificationOverride: verificationOverride,
+            afterPrepare: afterPrepare,
+            removeItem: { try FileManager.default.removeItem(at: $0) }
+        ))
+    }
+
+    static func installServer(
+        _ server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        verificationOverride: (() -> Bool)?,
+        removeItem: @escaping (URL) throws -> Void,
+    ) throws -> InstallWorkflowResult {
+        try installServer(server, format: format, at: url, hooks: .init(
+            verificationOverride: verificationOverride,
+            afterPrepare: nil,
+            removeItem: removeItem
+        ))
+    }
+
+    private static func installServer(
+        _ server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        hooks: InstallHooks
+    ) throws -> InstallWorkflowResult {
+        try withConfigurationLock(at: url) {
+            try installServerLocked(
+                server,
+                format: format,
+                at: url,
+                hooks: hooks
+            )
+        }
+    }
+
+    private static func installServerLocked(
+        _ server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        hooks: InstallHooks
     ) throws -> InstallWorkflowResult {
         let existed = configPathKind(at: url) == .regularFile
         let prepared = try prepareServerUpdate(server, format: format, at: url)
+        hooks.afterPrepare?()
         do {
-            try writeConfig(prepared.data, to: url, backupSuffix: server.backupSuffix)
+            try writeConfig(
+                prepared.data,
+                to: url,
+                backupSuffix: server.backupSuffix,
+                beforeReplacing: { try requireUnchanged(prepared.sourceIdentity, at: url) }
+            )
+        } catch let error as InstallWorkflowError {
+            throw error
         } catch {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }
 
-        let verified: Bool = if let verificationOverride {
+        let verified: Bool = if let verificationOverride = hooks.verificationOverride {
             verificationOverride()
         } else {
             verifyServer(server, format: format, at: url)
@@ -243,10 +247,10 @@ extension MCPClientInstall {
                     )
                     remainingBackupURL = nil
                     if let displacedURL = restored.displacedURL {
-                        try removeItem(displacedURL)
+                        try hooks.removeItem(displacedURL)
                     }
                 } else {
-                    try removeItem(url)
+                    try hooks.removeItem(url)
                 }
             } catch {
                 throw InstallWorkflowError.verificationRollbackFailed(
@@ -256,15 +260,6 @@ extension MCPClientInstall {
             throw InstallWorkflowError.verificationFailed(url: url, backupURL: nil)
         }
         return InstallWorkflowResult(alreadyPresent: prepared.alreadyPresent, backupURL: backupURL)
-    }
-
-    private static func existingTOML(at url: URL) throws -> String {
-        guard FileManager.default.fileExists(atPath: url.path) else { return "" }
-        let data = try boundedConfigurationData(at: url)
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw CocoaError(.fileReadInapplicableStringEncoding)
-        }
-        return text
     }
 
     private static func verifyServer(
