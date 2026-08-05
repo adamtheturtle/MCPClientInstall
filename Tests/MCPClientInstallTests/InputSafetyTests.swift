@@ -53,6 +53,23 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func restoreReportsInvalidServersAsWorkflowErrors() {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        do {
+            _ = try MCPClientInstall.restoreBackup(
+                for: MCPServerSpec(name: " ", command: "/demo"),
+                format: .json,
+                at: file,
+                displacedSuffix: ".displaced"
+            )
+            Issue.record("Expected invalid server failure")
+        } catch let error as MCPClientInstall.InstallWorkflowError {
+            #expect(error == .invalidServer(.blankName))
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
+        }
+    }
+
     @Test func executableSymlinksAreNotRunnable() throws {
         let directory = temporaryDirectory()
         let executable = directory.appendingPathComponent("tool")
