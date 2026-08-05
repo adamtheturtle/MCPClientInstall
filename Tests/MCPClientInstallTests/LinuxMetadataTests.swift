@@ -41,9 +41,11 @@ struct LinuxMetadataTests {
 
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
         let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+        let extendedAttributeSize = extendedAttributeSize(at: file)
+        let extendedAttributeError = errno
         #expect(permissions.intValue & 0o777 == 0o640)
-        #expect(extendedAttributeSize(at: file) == -1)
-        #expect(errno == ENODATA)
+        #expect(extendedAttributeSize == -1)
+        #expect(extendedAttributeError == ENODATA)
     }
 
     private func setExtendedAttribute(_ value: Data, at url: URL) throws {
