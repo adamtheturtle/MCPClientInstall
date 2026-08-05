@@ -60,16 +60,16 @@ struct PathSafetyTests {
         let file = directory.appendingPathComponent("config.json")
         let backup = directory.appendingPathComponent("config.json.backup")
         let server = MCPServerSpec(name: "demo", command: "/demo", backupSuffix: ".backup")
-        try Data("live".utf8).write(to: file)
-        try Data("backup".utf8).write(to: backup)
+        try Data(#"{"live":true}"#.utf8).write(to: file)
+        try Data(#"{"backup":true}"#.utf8).write(to: backup)
 
         #expect(throws: MCPClientInstall.InstallWorkflowError.self) {
             try MCPClientInstall.restoreBackup(
-                for: server, at: file, displacedSuffix: "../displaced"
+                for: server, format: .json, at: file, displacedSuffix: "../displaced"
             )
         }
-        #expect(try String(contentsOf: file, encoding: .utf8) == "live")
-        #expect(try String(contentsOf: backup, encoding: .utf8) == "backup")
+        #expect(try String(contentsOf: file, encoding: .utf8) == #"{"live":true}"#)
+        #expect(try String(contentsOf: backup, encoding: .utf8) == #"{"backup":true}"#)
     }
 
     @Test func missingAndUninspectablePathsRemainDistinct() throws {

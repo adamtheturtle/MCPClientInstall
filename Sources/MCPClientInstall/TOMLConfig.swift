@@ -70,6 +70,10 @@ public extension MCPClientInstall {
         return configured.command == server.command && configured.arguments == server.arguments
     }
 
+    static func validateCodexTOML(_ text: String) throws {
+        _ = try TOMLDecoder().decode(TOMLValidationDocument.self, from: text)
+    }
+
     /// Scans for declarations of `serverName` without interpreting apparent
     /// headers inside multiline strings or arrays.
     static func scanCodexConfig(_ text: String, serverName: String) -> TOMLScan {
