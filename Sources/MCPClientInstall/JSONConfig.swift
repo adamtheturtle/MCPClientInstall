@@ -22,10 +22,11 @@ public extension MCPClientInstall {
         case incompatibleMCPServers
         case incompatibleServer(name: String)
         case invalidJSONObject
+        case duplicateKey(String)
     }
 
     /// Result of merging a server into a JSON root object.
-    struct JSONMergeResult: @unchecked Sendable {
+    struct JSONMergeResult {
         public var root: [String: Any]
         public var alreadyPresent: Bool
     }
@@ -79,6 +80,7 @@ public extension MCPClientInstall {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
 
         let data = try boundedConfigurationData(at: url)
+        try rejectDuplicateJSONKeys(in: data)
         // Whitespace-only counts as blank. A file holding just a newline is empty
         // to the person who made it, and rejecting it as corrupt would refuse to
         // write a config the installer could perfectly well create.
