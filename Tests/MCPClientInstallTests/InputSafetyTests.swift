@@ -35,6 +35,24 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func installReportsInvalidServersConsistentlyAcrossFormats() throws {
+        let directory = temporaryDirectory()
+        for format in [MCPClientInstall.ConfigurationFormat.json, .codexTOML] {
+            let file = directory.appendingPathComponent(UUID().uuidString)
+            do {
+                _ = try MCPClientInstall.installServer(
+                    MCPServerSpec(name: " ", command: "/demo"),
+                    format: format,
+                    at: file
+                )
+                Issue.record("Expected invalid server failure")
+            } catch let error as MCPClientInstall.InstallWorkflowError {
+                #expect(error == .invalidServer(.blankName))
+            }
+            #expect(!FileManager.default.fileExists(atPath: file.path))
+        }
+    }
+
     @Test func executableSymlinksAreNotRunnable() throws {
         let directory = temporaryDirectory()
         let executable = directory.appendingPathComponent("tool")
