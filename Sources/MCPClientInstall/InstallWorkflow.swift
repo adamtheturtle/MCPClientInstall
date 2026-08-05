@@ -17,10 +17,15 @@ public extension MCPClientInstall {
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
+        case verificationRollbackFailed(url: URL, backupURL: URL?, detail: String)
         case backupUnavailable(url: URL)
+        case invalidBackup(url: URL, detail: String)
         case displacedFileExists(url: URL)
         case unsafeSiblingSuffix(String)
         case restorationFailed(url: URL, detail: String)
+        case restorationRollbackFailed(
+            url: URL, displacedURL: URL, backupURL: URL, detail: String
+        )
     }
 
     /// The complete bytes prepared for a safe replacement.
@@ -128,15 +133,34 @@ public extension MCPClientInstall {
     /// Restores the side-by-side backup and retains the displaced current file.
     static func restoreBackup(
         for server: MCPServerSpec,
+        format: ConfigurationFormat,
         at url: URL,
         displacedSuffix: String,
     ) throws -> RestoreWorkflowResult {
-        let manager = FileManager.default
+        try restoreBackup(
+            for: server,
+            format: format,
+            at: url,
+            displacedSuffix: displacedSuffix,
+            moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+        )
+    }
+}
+
+extension MCPClientInstall {
+    static func restoreBackup(
+        for server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        displacedSuffix: String,
+        moveItem: (URL, URL) throws -> Void,
+    ) throws -> RestoreWorkflowResult {
         try server.validate()
         let backupURL = try sibling(of: url, suffix: server.backupSuffix)
         guard configPathKind(at: backupURL) == .regularFile else {
             throw InstallWorkflowError.backupUnavailable(url: backupURL)
         }
+        try validateBackup(at: backupURL, format: format)
 
         let currentKind = configPathKind(at: url)
         guard currentKind == .absent || currentKind == .regularFile else {
@@ -144,7 +168,7 @@ public extension MCPClientInstall {
         }
         guard currentKind == .regularFile else {
             do {
-                try manager.moveItem(at: backupURL, to: url)
+                try moveItem(backupURL, url)
                 return RestoreWorkflowResult(displacedURL: nil)
             } catch {
                 throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
@@ -156,26 +180,37 @@ public extension MCPClientInstall {
             throw InstallWorkflowError.displacedFileExists(url: displacedURL)
         }
         do {
-            try manager.moveItem(at: url, to: displacedURL)
+            try moveItem(url, displacedURL)
             do {
-                try manager.moveItem(at: backupURL, to: url)
-            } catch {
-                try? manager.moveItem(at: displacedURL, to: url)
-                throw error
+                try moveItem(backupURL, url)
+            } catch let activationError {
+                do {
+                    try moveItem(displacedURL, url)
+                } catch let rollbackError {
+                    throw InstallWorkflowError.restorationRollbackFailed(
+                        url: url,
+                        displacedURL: displacedURL,
+                        backupURL: backupURL,
+                        detail: "activation: \(activationError.localizedDescription); "
+                            + "rollback: \(rollbackError.localizedDescription)"
+                    )
+                }
+                throw activationError
             }
             return RestoreWorkflowResult(displacedURL: displacedURL)
+        } catch let error as InstallWorkflowError {
+            throw error
         } catch {
             throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
         }
     }
-}
 
-extension MCPClientInstall {
     static func installServer(
         _ server: MCPServerSpec,
         format: ConfigurationFormat,
         at url: URL,
         verificationOverride: (() -> Bool)?,
+        removeItem: (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) },
     ) throws -> InstallWorkflowResult {
         let existed = configPathKind(at: url) == .regularFile
         let prepared = try prepareServerUpdate(server, format: format, at: url)
@@ -192,7 +227,27 @@ extension MCPClientInstall {
         }
         let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
         guard verified else {
-            throw InstallWorkflowError.verificationFailed(url: url, backupURL: backupURL)
+            do {
+                if existed {
+                    let restored = try restoreBackup(
+                        for: server,
+                        format: format,
+                        at: url,
+                        displacedSuffix: ".verification-failed-\(UUID().uuidString)",
+                        moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                    )
+                    if let displacedURL = restored.displacedURL {
+                        try removeItem(displacedURL)
+                    }
+                } else {
+                    try removeItem(url)
+                }
+            } catch {
+                throw InstallWorkflowError.verificationRollbackFailed(
+                    url: url, backupURL: backupURL, detail: error.localizedDescription
+                )
+            }
+            throw InstallWorkflowError.verificationFailed(url: url, backupURL: nil)
         }
         return InstallWorkflowResult(alreadyPresent: prepared.alreadyPresent, backupURL: backupURL)
     }
@@ -218,6 +273,19 @@ extension MCPClientInstall {
         case .codexTOML:
             guard let text = try? existingTOML(at: url) else { return false }
             return mcpServerIsConfigured(server, inCodexTOML: text)
+        }
+    }
+
+    private static func validateBackup(at url: URL, format: ConfigurationFormat) throws {
+        do {
+            switch format {
+            case .json:
+                _ = try existingJSON(at: url)
+            case .codexTOML:
+                try validateCodexTOML(try existingTOML(at: url))
+            }
+        } catch {
+            throw InstallWorkflowError.invalidBackup(url: url, detail: error.localizedDescription)
         }
     }
 

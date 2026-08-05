@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import MCPClientInstall
-
 @Suite("JSON configuration")
 struct JSONConfigTests {
     @Test func preservesUnrelatedKeysAndReportsReplacement() throws {
@@ -99,7 +98,6 @@ struct JSONConfigTests {
     }
 
 }
-
 @Suite("Codex TOML configuration")
 struct TOMLConfigTests {
     private let server = MCPServerSpec(
@@ -348,6 +346,7 @@ struct InstallWorkflowTests {
 
         let restored = try MCPClientInstall.restoreBackup(
             for: server,
+            format: .json,
             at: file,
             displacedSuffix: ".replaced"
         )
@@ -356,7 +355,7 @@ struct InstallWorkflowTests {
         #expect(FileManager.default.fileExists(atPath: displaced.path))
     }
 
-    @Test func verificationFailureReportsTheRecoverableBackup() throws {
+    @Test func verificationFailureRestoresThePreviousConfiguration() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         try Data("{}".utf8).write(to: file)
 
@@ -373,8 +372,9 @@ struct InstallWorkflowTests {
                 Issue.record("Unexpected error: \(error)")
                 return
             }
-            #expect(backupURL?.lastPathComponent == "config.json.backup")
-            #expect(FileManager.default.fileExists(atPath: backupURL?.path ?? ""))
+            #expect(backupURL == nil)
+            #expect(try String(contentsOf: file, encoding: .utf8) == "{}")
+            #expect(!FileManager.default.fileExists(atPath: file.path + ".backup"))
         }
     }
 
