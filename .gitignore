@@ -2,3 +2,6 @@
 .swiftpm/
 .DS_Store
 Package.resolved
+
+# Vale styles downloaded by ``vale sync``
+styles/
