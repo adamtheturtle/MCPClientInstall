@@ -1,6 +1,12 @@
 import Foundation
 import MCPClientInstallSystem
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 private struct InstallHooks {
     let verificationOverride: (() -> Bool)?
     let afterPrepare: (() -> Void)?
@@ -89,6 +95,8 @@ public extension MCPClientInstall {
                 displacedSuffix: displacedSuffix,
                 exchangeItem: atomicExchange,
                 afterExchange: {},
+                syncFile: syncConfigurationFile,
+                syncDirectory: syncConfigurationDirectory,
                 moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
             )
         }
@@ -103,6 +111,8 @@ extension MCPClientInstall {
         displacedSuffix: String,
         exchangeItem: (URL, URL) throws -> Void = atomicExchange,
         afterExchange: () throws -> Void = {},
+        syncFile: (URL) throws -> Void = syncConfigurationFile,
+        syncDirectory: (URL) throws -> Void = syncConfigurationDirectory,
         moveItem: (URL, URL) throws -> Void,
     ) throws -> RestoreWorkflowResult {
         do {
@@ -120,7 +130,10 @@ extension MCPClientInstall {
         }
         guard currentKind == .regularFile else {
             do {
+                try syncFile(backupURL)
                 try moveItem(backupURL, url)
+                try syncFile(url)
+                try syncDirectory(url.deletingLastPathComponent())
                 return RestoreWorkflowResult(displacedURL: nil)
             } catch {
                 throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
@@ -132,9 +145,14 @@ extension MCPClientInstall {
             throw InstallWorkflowError.displacedFileExists(url: displacedURL)
         }
         do {
+            try syncFile(backupURL)
             try exchangeItem(url, backupURL)
+            try syncFile(url)
+            try syncDirectory(url.deletingLastPathComponent())
             try afterExchange()
             try moveItem(backupURL, displacedURL)
+            try syncFile(displacedURL)
+            try syncDirectory(url.deletingLastPathComponent())
             return RestoreWorkflowResult(displacedURL: displacedURL)
         } catch {
             throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
@@ -362,4 +380,22 @@ private func atomicExchange(_ first: URL, _ second: URL) throws {
     guard result == 0 else {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
+}
+
+private func syncConfigurationFile(at url: URL) throws {
+    let descriptor = url.path.withCString { open($0, O_RDONLY | O_CLOEXEC) }
+    guard descriptor >= 0 else { throw currentPOSIXError() }
+    defer { _ = close(descriptor) }
+    guard fsync(descriptor) == 0 else { throw currentPOSIXError() }
+}
+
+private func syncConfigurationDirectory(at url: URL) throws {
+    let descriptor = url.path.withCString { open($0, O_RDONLY | O_CLOEXEC) }
+    guard descriptor >= 0 else { throw currentPOSIXError() }
+    defer { _ = close(descriptor) }
+    guard fsync(descriptor) == 0 else { throw currentPOSIXError() }
+}
+
+private func currentPOSIXError() -> NSError {
+    NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
 }
