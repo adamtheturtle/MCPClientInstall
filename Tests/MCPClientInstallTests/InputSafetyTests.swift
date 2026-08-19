@@ -237,6 +237,28 @@ struct InputSafetyTests {
         )
     }
 
+    @Test func aSwappedReplacementTemporaryIsNeverCommitted() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let original = Data("{}".utf8)
+        try original.write(to: file)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.self) {
+            try MCPClientInstall.writeConfig(
+                Data(#"{"approved":true}"#.utf8),
+                to: file,
+                backupSuffix: ".backup",
+                beforeReplacing: {},
+                afterWritingTemporary: { temporary in
+                    try FileManager.default.removeItem(at: temporary)
+                    try Data(#"{"malicious":true}"#.utf8).write(to: temporary)
+                }
+            )
+        }
+
+        #expect(try Data(contentsOf: file) == original)
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
