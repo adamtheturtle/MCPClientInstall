@@ -9,7 +9,9 @@
 
 import Foundation
 
-#if os(Linux)
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
 import Glibc
 #endif
 
@@ -134,8 +136,7 @@ public enum MCPClientInstall {
             let temporary = url.deletingLastPathComponent()
                 .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
             do {
-                try data.write(to: temporary, options: .atomic)
-                try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+                try writePrivateTemporary(data, to: temporary)
                 try beforeReplacing()
                 try manager.moveItem(at: temporary, to: url)
             } catch {
@@ -147,7 +148,7 @@ public enum MCPClientInstall {
 
         let temporary = url.deletingLastPathComponent()
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
-        try data.write(to: temporary, options: .atomic)
+        try writePrivateTemporary(data, to: temporary)
 #if os(Linux)
         try replaceConfigOnLinux(
             at: url,
@@ -169,6 +170,38 @@ public enum MCPClientInstall {
             throw error
         }
 #endif
+    }
+
+    private static func writePrivateTemporary(_ data: Data, to url: URL) throws {
+        let descriptor = url.path.withCString {
+            open($0, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, S_IRUSR | S_IWUSR)
+        }
+        guard descriptor >= 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        let privateMode = mode_t(0o600)
+        guard fchmod(descriptor, privateMode) == 0 else {
+            let code = errno
+            close(descriptor)
+            try? FileManager.default.removeItem(at: url)
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+        }
+        var status = stat()
+        guard fstat(descriptor, &status) == 0, status.st_mode & mode_t(0o777) == privateMode else {
+            let code = errno == 0 ? EACCES : errno
+            close(descriptor)
+            try? FileManager.default.removeItem(at: url)
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+        }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        do {
+            try handle.write(contentsOf: data)
+            try handle.close()
+        } catch {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
     }
 
 #if os(Linux)
@@ -198,9 +231,7 @@ public enum MCPClientInstall {
                 parkedPreviousBackup = true
             }
 
-            if let permissions = try manager.attributesOfItem(atPath: url.path)[.posixPermissions] {
-                try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: temporary.path)
-            }
+            let permissions = try manager.attributesOfItem(atPath: url.path)[.posixPermissions]
             try manager.copyItem(at: url, to: backup)
             try syncFile(at: backup)
             try syncDirectory(at: directory)
@@ -208,6 +239,9 @@ public enum MCPClientInstall {
             try beforeReplacing()
             try renameReplacing(temporary, with: url)
             installedCurrent = true
+            if let permissions {
+                try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
+            }
             try syncDirectory(at: directory)
 
             if parkedPreviousBackup {
