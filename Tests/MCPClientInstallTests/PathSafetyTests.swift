@@ -32,6 +32,20 @@ struct PathSafetyTests {
         }
     }
 
+    @Test func configurationDirectoriesRejectNonFileHomeURLs() {
+        let home = URL(string: "https://example.com/home")!
+        let location = MCPDesktopClient.ConfigurationLocation(
+            directoryComponents: ["safe"],
+            fallbackDirectoryComponents: [],
+            fileName: "config.json",
+            format: .json
+        )
+
+        #expect(throws: MCPDesktopClient.ConfigurationLocationError.nonFileHomeURL(home)) {
+            try location.directory(relativeTo: home)
+        }
+    }
+
     @Test func serverBackupSuffixCannotEscapeTheConfigurationDirectory() {
         let explicit = MCPServerSpec(
             name: "demo", command: "/demo", backupSuffix: "/tmp/stolen"
