@@ -60,6 +60,49 @@ struct TransactionIsolationTests {
         try expectServers(["first", "second"], at: file)
     }
 
+    @Test func restorationWaitsForTheConfigurationTransactionLock() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        try Data(#"{"backup":true}"#.utf8).write(to: backup)
+        let lockHeld = DispatchSemaphore(value: 0)
+        let releaseLock = DispatchSemaphore(value: 0)
+        let restoreFinished = DispatchSemaphore(value: 0)
+        let group = DispatchGroup()
+        let failures = FailureBox()
+
+        group.enter()
+        DispatchQueue.global().async {
+            defer { group.leave() }
+            do {
+                try MCPClientInstall.withConfigurationLock(at: file) {
+                    lockHeld.signal()
+                    releaseLock.wait()
+                }
+            } catch { failures.append(error.localizedDescription) }
+        }
+        lockHeld.wait()
+
+        group.enter()
+        DispatchQueue.global().async {
+            defer { group.leave(); restoreFinished.signal() }
+            do {
+                _ = try MCPClientInstall.restoreBackup(
+                    for: MCPServerSpec(name: "demo", command: "/demo", backupSuffix: ".backup"),
+                    format: .json,
+                    at: file,
+                    displacedSuffix: ".displaced"
+                )
+            } catch { failures.append(error.localizedDescription) }
+        }
+
+        #expect(restoreFinished.wait(timeout: .now() + .milliseconds(50)) == .timedOut)
+        releaseLock.signal()
+        group.wait()
+        #expect(failures.values.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+
     @Test func aPathSwapBeforeReplacementIsRejected() throws {
         let directory = temporaryDirectory()
         let file = directory.appendingPathComponent("config.json")

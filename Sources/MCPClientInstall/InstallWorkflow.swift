@@ -77,13 +77,15 @@ public extension MCPClientInstall {
         at url: URL,
         displacedSuffix: String,
     ) throws -> RestoreWorkflowResult {
-        try restoreBackup(
-            for: server,
-            format: format,
-            at: url,
-            displacedSuffix: displacedSuffix,
-            moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
-        )
+        try withConfigurationLock(at: url) {
+            try restoreBackup(
+                for: server,
+                format: format,
+                at: url,
+                displacedSuffix: displacedSuffix,
+                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+            )
+        }
     }
 }
 
