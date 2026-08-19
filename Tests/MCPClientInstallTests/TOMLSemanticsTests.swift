@@ -79,6 +79,22 @@ struct TOMLSemanticsTests {
         }
     }
 
+    @Test(
+        "Owned dotted-key descendants are incompatible",
+        arguments: ["command.value", "args.value"]
+    )
+    func ownedDottedKeyDescendantsAreIncompatible(key: String) {
+        let original = """
+        [mcp_servers.demo]
+        \(key) = "old"
+        """
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        #expect(throws: MCPClientInstall.TOMLConfigError.self) {
+            try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+        }
+    }
+
     @Test func nestedCustomTablesArePreserved() throws {
         let original = """
         [mcp_servers.demo]
