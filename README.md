@@ -36,20 +36,21 @@ let server = MCPServerSpec(
     arguments: ["--mcp"]
 )
 
-let location = MCPDesktopClient.codex.configurationLocation
-// Resolving a checked configuration URL can throw for an unsafe location.
-let configURL = try location.file(relativeTo: homeDirectory)
-
 // JSON: Claude Desktop, Claude Code, or Cursor
-let root = try MCPClientInstall.existingJSON(at: configURL)
+let jsonLocation = MCPDesktopClient.cursor.configurationLocation
+// Resolving a checked configuration URL can throw for an unsafe location.
+let jsonConfigURL = try jsonLocation.file(relativeTo: homeDirectory)
+let root = try MCPClientInstall.existingJSON(at: jsonConfigURL)
 let merged = try addingMCPServer(server, toJSON: root)
 let data = try MCPClientInstall.prettyJSONData(from: merged.root)
 
 // TOML: Codex
+let codexLocation = MCPDesktopClient.codex.configurationLocation
+let codexConfigURL = try codexLocation.file(relativeTo: homeDirectory)
 let updated = try MCPClientInstall.prepareServerUpdate(
     server,
     format: .codexTOML,
-    at: configURL
+    at: codexConfigURL
 )
 ```
 
@@ -59,9 +60,10 @@ ask for confirmation first:
 ```swift
 try MCPClientInstall.writeConfig(
     data,
-    to: configURL,
+    to: jsonConfigURL,
     backupSuffix: server.backupSuffix
 )
+
 ```
 
 For a complete prepare, safe replacement, read-back verification, and recoverable
@@ -70,14 +72,14 @@ backup in one operation:
 ```swift
 let result = try MCPClientInstall.installServer(
     server,
-    format: location.format,
-    at: configURL
+    format: codexLocation.format,
+    at: codexConfigURL
 )
 
 let restored = try MCPClientInstall.restoreBackup(
     for: server,
-    format: location.format,
-    at: configURL,
+    format: codexLocation.format,
+    at: codexConfigURL,
     displacedSuffix: ".my-server-before-restore"
 )
 ```
