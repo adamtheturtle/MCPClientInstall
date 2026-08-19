@@ -160,6 +160,30 @@ struct RestoreSafetyTests {
         #expect(MCPClientInstall.configPathKind(at: file) == .regularFile)
     }
 
+    @Test func successfulRestoreSyncsEveryDurableStateTransition() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        let displaced = directory.appendingPathComponent("config.json.displaced")
+        try Data("{}".utf8).write(to: file)
+        try Data(#"{"old":true}"#.utf8).write(to: backup)
+        var syncedFiles: [URL] = []
+        var syncedDirectories: [URL] = []
+
+        _ = try MCPClientInstall.restoreBackup(
+            for: server,
+            format: .json,
+            at: file,
+            displacedSuffix: ".displaced",
+            syncFile: { syncedFiles.append($0) },
+            syncDirectory: { syncedDirectories.append($0) },
+            moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+        )
+
+        #expect(syncedFiles == [backup, file, displaced])
+        #expect(syncedDirectories == [directory, directory])
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
