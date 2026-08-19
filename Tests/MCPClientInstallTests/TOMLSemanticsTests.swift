@@ -86,6 +86,18 @@ struct TOMLSemanticsTests {
         }
     }
 
+    @Test func byteOrderMarkDoesNotHideExistingServerTable() throws {
+        let original = "\u{FEFF}[mcp_servers.demo]\ncommand = \"/old\"\nargs = [\"old\"]\n"
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(merged.text.hasPrefix("\u{FEFF}[mcp_servers.demo]"))
+        #expect(merged.text.components(separatedBy: "[mcp_servers.demo]").count == 2)
+        #expect(MCPClientInstall.codexServerIsConfigured(server, in: merged.text))
+    }
+
     @Test(
         "Incompatible mcp_servers ancestors are rejected",
         arguments: [
