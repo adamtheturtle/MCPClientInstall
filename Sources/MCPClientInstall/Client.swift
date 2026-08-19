@@ -155,7 +155,8 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
     /// A ready-to-paste config snippet (JSON object or TOML table) for the manual
     /// "edit the file yourself" fallback. Always matches ``format`` — Claude Code
     /// gets the JSON block that belongs in `~/.claude.json`, not a CLI command.
-    public func configSnippet(for server: MCPServerSpec) -> String {
+    public func configSnippet(for server: MCPServerSpec) throws -> String {
+        try server.validate()
         switch format {
         case .json:
             let config: [String: Any] = [
@@ -163,10 +164,13 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
                     server.name: ["command": server.command, "args": server.arguments]
                 ]
             ]
-            let data = (try? JSONSerialization.data(
+            let data = try JSONSerialization.data(
                 withJSONObject: config, options: [.prettyPrinted, .sortedKeys]
-            )) ?? Data("{}".utf8)
-            return String(data: data, encoding: .utf8) ?? "{}"
+            )
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw CocoaError(.fileWriteInapplicableStringEncoding)
+            }
+            return text
 
         case .codexTOML:
             return MCPClientInstall.codexServerBlock(for: server)

@@ -34,4 +34,21 @@ struct ClientTests {
         #expect(MCPDesktopClient.codex.configPath == "~/.codex/config.toml")
         #expect(MCPDesktopClient.cursor.configPath == "~/.cursor/mcp.json")
     }
+
+    @Test func `config snippets reject invalid server specs`() {
+        let invalid = MCPServerSpec(name: " ", command: " ")
+
+        for client in MCPDesktopClient.allCases {
+            #expect(throws: MCPServerSpec.ValidationError.blankName) {
+                try client.configSnippet(for: invalid)
+            }
+        }
+    }
+
+    @Test func `config snippets contain valid servers`() throws {
+        let server = MCPServerSpec(name: "demo", command: "/demo")
+
+        #expect(try MCPDesktopClient.cursor.configSnippet(for: server).contains("mcpServers"))
+        #expect(try MCPDesktopClient.codex.configSnippet(for: server).contains("mcp_servers.demo"))
+    }
 }
