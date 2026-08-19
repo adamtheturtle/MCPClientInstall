@@ -49,6 +49,24 @@ struct RestoreSafetyTests {
         }
     }
 
+    @Test func restorationDoesNotRequireAnExecutableCommand() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        try Data(#"{"mcpServers":{}}"#.utf8).write(to: backup)
+        let recoverySpec = MCPServerSpec(name: "demo", command: " ", backupSuffix: ".backup")
+
+        let result = try MCPClientInstall.restoreBackup(
+            for: recoverySpec,
+            format: .json,
+            at: file,
+            displacedSuffix: ".displaced"
+        )
+
+        #expect(result.displacedURL == nil)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+
     @Test func failedVerificationRemovesANewConfiguration() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
 

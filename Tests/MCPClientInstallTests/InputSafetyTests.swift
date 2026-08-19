@@ -124,18 +124,20 @@ struct InputSafetyTests {
         }
     }
 
-    @Test func restoreReportsInvalidServersAsWorkflowErrors() {
+    @Test func restoreReportsInvalidBackupPoliciesAsWorkflowErrors() {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         do {
             _ = try MCPClientInstall.restoreBackup(
-                for: MCPServerSpec(name: " ", command: "/demo"),
+                for: MCPServerSpec(
+                    name: "demo", command: "", backupSuffix: "../unsafe"
+                ),
                 format: .json,
                 at: file,
                 displacedSuffix: ".displaced"
             )
-            Issue.record("Expected invalid server failure")
+            Issue.record("Expected invalid backup policy")
         } catch let error as MCPClientInstall.InstallWorkflowError {
-            #expect(error == .invalidServer(.blankName))
+            #expect(error == .invalidServer(.unsafeBackupSuffix("../unsafe")))
         } catch {
             Issue.record("Unexpected error type: \(error)")
         }

@@ -47,7 +47,7 @@ public struct MCPServerSpec: Sendable, Equatable {
 
     func validate() throws {
         try validateConfiguration()
-        try validateBackupSuffix()
+        try validateBackupPolicy()
     }
 
     func validateConfiguration() throws {
@@ -65,7 +65,7 @@ public struct MCPServerSpec: Sendable, Equatable {
         }
     }
 
-    func validateBackupSuffix() throws {
+    func validateBackupPolicy() throws {
         guard isSafeFilenameSuffix(backupSuffix) else {
             throw ValidationError.unsafeBackupSuffix(backupSuffix)
         }
