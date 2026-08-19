@@ -169,8 +169,10 @@ struct RestoreSafetyTests {
                 format: .json,
                 at: file,
                 displacedSuffix: ".displaced",
-                afterExchange: { throw InjectedFailure() },
-                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                hooks: .init(
+                    afterExchange: { throw InjectedFailure() },
+                    moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                )
             )
             Issue.record("Expected interrupted restoration")
         } catch let error as MCPClientInstall.InstallWorkflowError {
@@ -200,9 +202,11 @@ struct RestoreSafetyTests {
             format: .json,
             at: file,
             displacedSuffix: ".displaced",
-            syncFile: { syncedFiles.append($0) },
-            syncDirectory: { syncedDirectories.append($0) },
-            moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+            hooks: .init(
+                syncFile: { syncedFiles.append($0) },
+                syncDirectory: { syncedDirectories.append($0) },
+                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+            )
         )
 
         #expect(syncedFiles == [backup, file, displaced])
@@ -225,13 +229,15 @@ struct RestoreSafetyTests {
                 format: .json,
                 at: file,
                 displacedSuffix: ".displaced",
-                beforeExchange: {
-                    try FileManager.default.moveItem(at: file, to: parked)
-                    try FileManager.default.createSymbolicLink(
-                        at: file, withDestinationURL: linkTarget
-                    )
-                },
-                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                hooks: .init(
+                    beforeExchange: {
+                        try FileManager.default.moveItem(at: file, to: parked)
+                        try FileManager.default.createSymbolicLink(
+                            at: file, withDestinationURL: linkTarget
+                        )
+                    },
+                    moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                )
             )
         }
 
@@ -240,6 +246,32 @@ struct RestoreSafetyTests {
         ))
         #expect(try Data(contentsOf: backup) == Data(#"{"old":true}"#.utf8))
         #expect(!FileManager.default.fileExists(atPath: file.path + ".displaced"))
+    }
+
+    @Test func restoreRejectsABackupChangedAfterValidation() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        let live = Data("{}".utf8)
+        let malformed = Data("{".utf8)
+        try live.write(to: file)
+        try Data(#"{"old":true}"#.utf8).write(to: backup)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.configurationChanged(url: backup)) {
+            try MCPClientInstall.restoreBackup(
+                for: server,
+                format: .json,
+                at: file,
+                displacedSuffix: ".displaced",
+                hooks: .init(
+                    beforeExchange: { try malformed.write(to: backup) },
+                    moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                )
+            )
+        }
+
+        #expect(try Data(contentsOf: file) == live)
+        #expect(try Data(contentsOf: backup) == malformed)
     }
 
     private func temporaryDirectory() -> URL {
