@@ -131,6 +131,26 @@ struct InputSafetyTests {
         #expect(!FileManager.default.fileExists(atPath: file.path))
     }
 
+    @Test func nonUTF8TOMLIsAnInvalidConfiguration() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.toml")
+        try Data([0xFF]).write(to: file)
+
+        do {
+            _ = try MCPClientInstall.prepareServerUpdate(
+                MCPServerSpec(name: "demo", command: "/demo"),
+                format: .codexTOML,
+                at: file
+            )
+            Issue.record("Expected invalid configuration")
+        } catch let error as MCPClientInstall.InstallWorkflowError {
+            guard case let .invalidConfiguration(url, _) = error else {
+                Issue.record("Unexpected workflow error: \(error)")
+                return
+            }
+            #expect(url == file)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

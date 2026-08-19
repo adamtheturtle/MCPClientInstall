@@ -59,6 +59,8 @@ extension MCPClientInstall {
             text = try existingTOML(at: url)
         } catch let ConfigurationReadError.tooLarge(limit) {
             throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
+        } catch let error as CocoaError {
+            throw InstallWorkflowError.invalidConfiguration(url: url, detail: error.localizedDescription)
         } catch {
             throw InstallWorkflowError.readFailed(url: url, detail: error.localizedDescription)
         }
