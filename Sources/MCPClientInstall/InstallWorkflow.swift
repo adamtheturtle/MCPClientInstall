@@ -103,9 +103,7 @@ extension MCPClientInstall {
             throw InstallWorkflowError.invalidServer(error)
         }
         let backupURL = try sibling(of: url, suffix: server.backupSuffix)
-        guard configPathKind(at: backupURL) == .regularFile else {
-            throw InstallWorkflowError.backupUnavailable(url: backupURL)
-        }
+        try requireRegularBackup(at: backupURL)
         try validateBackup(at: backupURL, format: format)
 
         let currentKind = configPathKind(at: url)
@@ -148,6 +146,16 @@ extension MCPClientInstall {
             throw error
         } catch {
             throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
+        }
+    }
+
+    private static func requireRegularBackup(at backupURL: URL) throws {
+        let kind = configPathKind(at: backupURL)
+        if kind == .absent {
+            throw InstallWorkflowError.backupUnavailable(url: backupURL)
+        }
+        guard kind == .regularFile else {
+            throw InstallWorkflowError.unsafePath(url: backupURL, kind: kind)
         }
     }
 
