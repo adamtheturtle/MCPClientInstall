@@ -50,6 +50,8 @@ public enum MCPClientInstall {
         case unsafeBackupSuffix(String)
         case unsafePath(ConfigPathKind)
         case configurationTooLarge(limit: Int)
+        /// The replacement is live, but a subsequent durability or cleanup step failed.
+        case committed(detail: String)
     }
 
     /// Classifies the config path without following symlinks.
@@ -130,7 +132,8 @@ public enum MCPClientInstall {
         _ data: Data,
         to url: URL,
         backupSuffix: String,
-        beforeReplacing: () throws -> Void
+        beforeReplacing: () throws -> Void,
+        afterCommit: () throws -> Void = {}
     ) throws {
         guard data.count <= maxConfigurationFileBytes else {
             throw ConfigWriteError.configurationTooLarge(limit: maxConfigurationFileBytes)
@@ -165,7 +168,8 @@ public enum MCPClientInstall {
             at: url,
             with: temporary,
             backupSuffix: backupSuffix,
-            beforeReplacing: beforeReplacing
+            beforeReplacing: beforeReplacing,
+            afterCommit: afterCommit
         )
 #else
         do {
@@ -225,7 +229,8 @@ public enum MCPClientInstall {
         at url: URL,
         with temporary: URL,
         backupSuffix: String,
-        beforeReplacing: () throws -> Void
+        beforeReplacing: () throws -> Void,
+        afterCommit: () throws -> Void
     ) throws {
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
@@ -250,6 +255,7 @@ public enum MCPClientInstall {
             try beforeReplacing()
             try renameReplacing(temporary, with: url)
             installedCurrent = true
+            try afterCommit()
             if let permissions {
                 try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
             }
@@ -260,6 +266,9 @@ public enum MCPClientInstall {
                 try syncDirectory(at: directory)
             }
         } catch {
+            let committedError = installedCurrent
+                ? ConfigWriteError.committed(detail: error.localizedDescription)
+                : nil
             if manager.fileExists(atPath: temporary.path) {
                 try? manager.removeItem(at: temporary)
             }
@@ -269,7 +278,7 @@ public enum MCPClientInstall {
             if !installedCurrent, parkedPreviousBackup, !manager.fileExists(atPath: backup.path) {
                 try? manager.moveItem(at: previousBackup, to: backup)
             }
-            throw error
+            throw committedError ?? error
         }
     }
 

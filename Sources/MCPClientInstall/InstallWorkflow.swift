@@ -32,6 +32,7 @@ public extension MCPClientInstall {
         case lockFailed(url: URL, detail: String)
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
+        case writeCommitted(url: URL, backupURL: URL?, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
         case verificationTargetChanged(url: URL, backupURL: URL?)
         case verificationRollbackFailed(url: URL, backupURL: URL?, detail: String)
@@ -247,10 +248,10 @@ extension MCPClientInstall {
                 backupSuffix: server.backupSuffix,
                 beforeReplacing: { try requireUnchanged(prepared.sourceIdentity, at: url) }
             )
+        } catch let error as ConfigWriteError {
+            throw try workflowError(for: error, server: server, url: url, configurationExisted: existed)
         } catch let error as InstallWorkflowError {
             throw error
-        } catch let ConfigWriteError.unsafePath(kind) {
-            throw InstallWorkflowError.unsafePath(url: url, kind: kind)
         } catch {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }
@@ -356,7 +357,7 @@ extension MCPClientInstall {
         }
     }
 
-    private static func sibling(of url: URL, suffix: String) throws -> URL {
+    static func sibling(of url: URL, suffix: String) throws -> URL {
         guard isSafeFilenameSuffix(suffix) else {
             throw InstallWorkflowError.unsafeSiblingSuffix(suffix)
         }
@@ -381,14 +382,12 @@ private func atomicExchange(_ first: URL, _ second: URL) throws {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
 }
-
 private func syncConfigurationFile(at url: URL) throws {
     let descriptor = url.path.withCString { open($0, O_RDONLY | O_CLOEXEC) }
     guard descriptor >= 0 else { throw currentPOSIXError() }
     defer { _ = close(descriptor) }
     guard fsync(descriptor) == 0 else { throw currentPOSIXError() }
 }
-
 private func syncConfigurationDirectory(at url: URL) throws {
     let descriptor = url.path.withCString { open($0, O_RDONLY | O_CLOEXEC) }
     guard descriptor >= 0 else { throw currentPOSIXError() }

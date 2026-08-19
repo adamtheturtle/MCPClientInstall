@@ -24,6 +24,32 @@ private func linuxGetXattr(
 
 @Suite("Linux replacement metadata")
 struct LinuxMetadataTests {
+    @Test func postCommitFailuresReportThatReplacementIsLive() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("config.json")
+        try Data("old".utf8).write(to: file)
+
+        do {
+            try MCPClientInstall.writeConfig(
+                Data("new".utf8),
+                to: file,
+                backupSuffix: ".backup",
+                beforeReplacing: {},
+                afterCommit: { throw InjectedPostCommitFailure() }
+            )
+            Issue.record("Expected a committed write error")
+        } catch let error as MCPClientInstall.ConfigWriteError {
+            guard case .committed = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+        }
+
+        #expect(try Data(contentsOf: file) == Data("new".utf8))
+        #expect(try Data(contentsOf: file.appendingPathExtension("backup")) == Data("old".utf8))
+    }
     @Test func preservesPermissionsAndExposesExtendedAttributeLoss() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -68,5 +94,9 @@ struct LinuxMetadataTests {
             }
         }
     }
+}
+
+private struct InjectedPostCommitFailure: LocalizedError {
+    var errorDescription: String? { "injected post-commit failure" }
 }
 #endif
