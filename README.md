@@ -37,6 +37,7 @@ let server = MCPServerSpec(
 )
 
 let location = MCPDesktopClient.codex.configurationLocation
+// Resolving a checked configuration URL can throw for an unsafe location.
 let configURL = try location.file(relativeTo: homeDirectory)
 
 // JSON: Claude Desktop, Claude Code, or Cursor
