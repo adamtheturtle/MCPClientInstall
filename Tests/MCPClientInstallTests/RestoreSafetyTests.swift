@@ -55,13 +55,14 @@ struct RestoreSafetyTests {
                 verificationOverride: { false },
                 removeItem: { _ in throw InjectedFailure() }
             )
-            Issue.record("Expected rollback failure")
+            Issue.record("Expected rollback cleanup failure")
         } catch let error as MCPClientInstall.InstallWorkflowError {
-            guard case let .verificationRollbackFailed(_, backupURL, _) = error else {
+            guard case let .verificationRollbackCleanupFailed(url, displacedURL, _) = error else {
                 Issue.record("Unexpected error: \(error)")
                 return
             }
-            #expect(backupURL == nil)
+            #expect(url == file)
+            #expect(FileManager.default.fileExists(atPath: displacedURL.path))
         }
         #expect(try String(contentsOf: file, encoding: .utf8) == "{}")
     }

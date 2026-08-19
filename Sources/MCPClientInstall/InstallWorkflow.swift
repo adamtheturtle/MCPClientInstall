@@ -27,6 +27,7 @@ public extension MCPClientInstall {
         case writeFailed(url: URL, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
         case verificationRollbackFailed(url: URL, backupURL: URL?, detail: String)
+        case verificationRollbackCleanupFailed(url: URL, displacedURL: URL, detail: String)
         case backupUnavailable(url: URL)
         case invalidBackup(url: URL, detail: String)
         case displacedFileExists(url: URL)
@@ -246,31 +247,60 @@ extension MCPClientInstall {
         }
         let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
         guard verified else {
-            var remainingBackupURL = backupURL
-            do {
-                if existed {
-                    let restored = try restoreBackup(
-                        for: server,
-                        format: format,
-                        at: url,
-                        displacedSuffix: ".verification-failed-\(UUID().uuidString)",
-                        moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
-                    )
-                    remainingBackupURL = nil
-                    if let displacedURL = restored.displacedURL {
-                        try hooks.removeItem(displacedURL)
-                    }
-                } else {
-                    try hooks.removeItem(url)
-                }
-            } catch {
-                throw InstallWorkflowError.verificationRollbackFailed(
-                    url: url, backupURL: remainingBackupURL, detail: error.localizedDescription
-                )
-            }
-            throw InstallWorkflowError.verificationFailed(url: url, backupURL: nil)
+            try rollbackAfterFailedVerification(
+                server: server,
+                format: format,
+                url: url,
+                backupURL: backupURL,
+                hooks: hooks
+            )
         }
         return InstallWorkflowResult(alreadyPresent: prepared.alreadyPresent, backupURL: backupURL)
+    }
+
+    private static func rollbackAfterFailedVerification(
+        server: MCPServerSpec,
+        format: ConfigurationFormat,
+        url: URL,
+        backupURL: URL?,
+        hooks: InstallHooks
+    ) throws -> Never {
+        if backupURL != nil {
+            let restored: RestoreWorkflowResult
+            do {
+                restored = try restoreBackup(
+                    for: server,
+                    format: format,
+                    at: url,
+                    displacedSuffix: ".verification-failed-\(UUID().uuidString)",
+                    moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                )
+            } catch {
+                throw InstallWorkflowError.verificationRollbackFailed(
+                    url: url, backupURL: backupURL, detail: error.localizedDescription
+                )
+            }
+            if let displacedURL = restored.displacedURL {
+                do {
+                    try hooks.removeItem(displacedURL)
+                } catch {
+                    throw InstallWorkflowError.verificationRollbackCleanupFailed(
+                        url: url,
+                        displacedURL: displacedURL,
+                        detail: error.localizedDescription
+                    )
+                }
+            }
+        } else {
+            do {
+                try hooks.removeItem(url)
+            } catch {
+                throw InstallWorkflowError.verificationRollbackFailed(
+                    url: url, backupURL: nil, detail: error.localizedDescription
+                )
+            }
+        }
+        throw InstallWorkflowError.verificationFailed(url: url, backupURL: nil)
     }
 
     private static func verifyServer(
