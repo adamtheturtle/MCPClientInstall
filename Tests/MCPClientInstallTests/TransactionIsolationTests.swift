@@ -161,6 +161,30 @@ struct TransactionIsolationTests {
         }
     }
 
+    @Test func multiplyLinkedConfigurationsAreRejected() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let alias = directory.appendingPathComponent("alias.json")
+        try Data("{}".utf8).write(to: file)
+        try FileManager.default.linkItem(at: file, to: alias)
+
+        do {
+            _ = try MCPClientInstall.prepareServerUpdate(
+                MCPServerSpec(name: "demo", command: "/demo"),
+                format: .json,
+                at: file
+            )
+            Issue.record("Expected hard-link refusal")
+        } catch let error as MCPClientInstall.InstallWorkflowError {
+            guard case let .multiplyLinkedConfiguration(url, linkCount) = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+            #expect(url == file)
+            #expect(linkCount == 2)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
