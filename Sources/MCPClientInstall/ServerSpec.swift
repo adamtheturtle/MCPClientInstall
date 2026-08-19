@@ -78,6 +78,7 @@ func isSafeFilenameSuffix(_ suffix: String) -> Bool {
     !suffix.isEmpty
         && suffix != "."
         && suffix != ".."
+        && !suffix.contains("\0")
         && !suffix.contains("/")
         && !suffix.contains("\\")
 }

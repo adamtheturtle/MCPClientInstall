@@ -39,7 +39,7 @@ public extension MCPClientInstall {
         to root: [String: Any],
         server: MCPServerSpec,
     ) throws -> JSONMergeResult {
-        try server.validateConfiguration()
+        try server.validate()
         var root = root
         var servers: [String: Any]
         if let existing = root["mcpServers"] {
