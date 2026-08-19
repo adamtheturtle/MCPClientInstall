@@ -78,4 +78,28 @@ struct TOMLSemanticsTests {
             try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
         }
     }
+
+    @Test func nestedCustomTablesArePreserved() throws {
+        let original = """
+        [mcp_servers.demo]
+        command = "/old"
+        args = ["old"]
+
+        [mcp_servers.demo.env]
+        TOKEN = "keep"
+
+        [[mcp_servers.demo.routes]]
+        path = "/one"
+        """
+        let server = MCPServerSpec(name: "demo", command: "/new", arguments: ["new"])
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(merged.text.contains("[mcp_servers.demo.env]"))
+        #expect(merged.text.contains("TOKEN = \"keep\""))
+        #expect(merged.text.contains("[[mcp_servers.demo.routes]]"))
+        #expect(merged.text.contains("path = \"/one\""))
+        #expect(MCPClientInstall.codexServerIsConfigured(server, in: merged.text))
+    }
 }
