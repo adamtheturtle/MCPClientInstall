@@ -301,6 +301,10 @@ extension MCPClientInstall {
             case .codexTOML:
                 try validateCodexTOML(try existingTOML(at: url))
             }
+        } catch let ConfigurationReadError.tooLarge(limit) {
+            throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
+        } catch let ConfigurationReadError.unsafePath(kind) {
+            throw InstallWorkflowError.unsafePath(url: url, kind: kind)
         } catch {
             throw InstallWorkflowError.invalidBackup(url: url, detail: error.localizedDescription)
         }

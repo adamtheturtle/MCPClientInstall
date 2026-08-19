@@ -30,6 +30,25 @@ struct RestoreSafetyTests {
         }
     }
 
+    @Test func oversizedBackupsPreserveTheirConfiguredLimit() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        #expect(FileManager.default.createFile(atPath: backup.path, contents: nil))
+        let writer = try FileHandle(forWritingTo: backup)
+        try writer.truncate(atOffset: UInt64(MCPClientInstall.maxConfigurationFileBytes + 1))
+        try writer.close()
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.configurationTooLarge(
+            url: backup,
+            limit: MCPClientInstall.maxConfigurationFileBytes
+        )) {
+            try MCPClientInstall.restoreBackup(
+                for: server, format: .json, at: file, displacedSuffix: ".displaced"
+            )
+        }
+    }
+
     @Test func failedVerificationRemovesANewConfiguration() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
 
