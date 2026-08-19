@@ -7,10 +7,12 @@ extension MCPClientInstall {
             try scanner.scan()
         } catch let error as JSONConfigError {
             throw error
+        } catch JSONScanFailure.malformed {
+            throw CocoaError(.propertyListReadCorrupt)
         } catch {
             // JSONSerialization remains the source of truth for general syntax
-            // errors. This pass exists only to retain duplicate-key information
-            // that Foundation would otherwise discard.
+            // errors outside the scanner's bounded nesting depth. This pass also
+            // retains duplicate-key information that Foundation would discard.
         }
     }
 }
@@ -73,6 +75,10 @@ private struct JSONDuplicateKeyScanner {
             skipWhitespace()
             if consume(UInt8(ascii: "}")) { return }
             guard consume(UInt8(ascii: ",")) else { throw JSONScanFailure.malformed }
+            skipWhitespace()
+            guard index < bytes.count, bytes[index] != UInt8(ascii: "}") else {
+                throw JSONScanFailure.malformed
+            }
         }
     }
 
@@ -86,6 +92,9 @@ private struct JSONDuplicateKeyScanner {
             if consume(UInt8(ascii: "]")) { return }
             guard consume(UInt8(ascii: ",")) else { throw JSONScanFailure.malformed }
             skipWhitespace()
+            guard index < bytes.count, bytes[index] != UInt8(ascii: "]") else {
+                throw JSONScanFailure.malformed
+            }
         }
     }
 

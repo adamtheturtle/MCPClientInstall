@@ -41,6 +41,22 @@ struct JSONSafetyTests {
         }
     }
 
+    @Test(
+        "Trailing commas are rejected in objects and arrays",
+        arguments: [
+            #"{"mcpServers": {},}"#,
+            #"{"mcpServers": {"demo": {"args": ["one",]}}}"#,
+        ]
+    )
+    func trailingCommasAreRejected(text: String) throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data(text.utf8).write(to: file)
+
+        #expect(throws: Error.self) {
+            try MCPClientInstall.existingJSON(at: file)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
