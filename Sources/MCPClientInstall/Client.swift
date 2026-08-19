@@ -197,7 +197,7 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
             "If it doesn't show up, check Claude Desktop's logs in ~/Library/Logs/Claude/."
 
         case .claudeCode:
-            "Confirm it connected with `claude mcp list` or `claude mcp get \(serverName)`."
+            "Confirm it connected with `claude mcp list`."
 
         case .codex, .cursor:
             nil

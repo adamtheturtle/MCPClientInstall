@@ -53,4 +53,12 @@ struct ClientTests {
         #expect(try MCPDesktopClient.cursor.configSnippet(for: server).contains("mcpServers"))
         #expect(try MCPDesktopClient.codex.configSnippet(for: server).contains("mcp_servers.demo"))
     }
+
+    @Test func `verification hints never interpolate server names into shell commands`() throws {
+        let unsafeShellText = "name; $(touch /tmp/unwanted) `code`\nnext"
+        let hint = try #require(MCPDesktopClient.claudeCode.verifyHint(serverName: unsafeShellText))
+
+        #expect(hint == "Confirm it connected with `claude mcp list`.")
+        #expect(!hint.contains(unsafeShellText))
+    }
 }
