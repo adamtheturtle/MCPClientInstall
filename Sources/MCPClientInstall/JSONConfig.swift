@@ -9,6 +9,12 @@
 import CoreFoundation
 import Foundation
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 public extension MCPClientInstall {
     static let maxConfigurationFileBytes = 4 * 1024 * 1024
 
@@ -192,12 +198,30 @@ public extension MCPClientInstall {
     }
 
     static func boundedConfigurationData(at url: URL) throws -> Data {
-        let kind = configPathKind(at: url)
-        guard kind == .regularFile else {
-            throw ConfigurationReadError.unsafePath(kind)
+        try boundedConfigurationData(at: url, afterOpen: {})
+    }
+
+    static func boundedConfigurationData(
+        at url: URL,
+        afterOpen: () throws -> Void
+    ) throws -> Data {
+        let descriptor = url.path.withCString {
+            open($0, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
         }
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
+        guard descriptor >= 0 else {
+            throw ConfigurationReadError.unsafePath(configPathKind(at: url))
+        }
+        defer { _ = close(descriptor) }
+
+        var status = stat()
+        guard fstat(descriptor, &status) == 0,
+              status.st_mode & S_IFMT == S_IFREG
+        else {
+            throw ConfigurationReadError.unsafePath(.special)
+        }
+        try afterOpen()
+
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
         var data = Data()
         while data.count <= maxConfigurationFileBytes {
             let remaining = maxConfigurationFileBytes + 1 - data.count
