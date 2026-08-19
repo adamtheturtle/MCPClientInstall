@@ -57,6 +57,21 @@ struct JSONSafetyTests {
         }
     }
 
+    @Test func excessiveDepthCannotBypassDuplicateKeyValidation() throws {
+        let nesting = 129
+        let text = #"{"deep":"#
+            + String(repeating: "[", count: nesting)
+            + "0"
+            + String(repeating: "]", count: nesting)
+            + #", "later": 1, "later": 2}"#
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data(text.utf8).write(to: file)
+
+        #expect(throws: Error.self) {
+            try MCPClientInstall.existingJSON(at: file)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
