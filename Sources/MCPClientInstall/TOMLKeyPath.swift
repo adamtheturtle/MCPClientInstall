@@ -56,6 +56,40 @@ func tomlScanningLine(_ line: String, at index: Int) -> String {
     index == 0 && line.hasPrefix("\u{FEFF}") ? String(line.dropFirst()) : line
 }
 
+struct TOMLPhysicalLine {
+    let content: String
+    let ending: String
+
+    var text: String { content + ending }
+}
+
+func tomlPhysicalLines(_ text: String) -> [TOMLPhysicalLine] {
+    var lines: [TOMLPhysicalLine] = []
+    let scalars = text.unicodeScalars
+    var start = scalars.startIndex
+    var index = start
+    while index < scalars.endIndex {
+        guard scalars[index] == "\n" else {
+            index = scalars.index(after: index)
+            continue
+        }
+        var contentEnd = index
+        var ending = "\n"
+        if contentEnd > start {
+            let previous = scalars.index(before: contentEnd)
+            if scalars[previous] == "\r" {
+                contentEnd = previous
+                ending = "\r\n"
+            }
+        }
+        lines.append(TOMLPhysicalLine(content: String(text[start ..< contentEnd]), ending: ending))
+        start = scalars.index(after: index)
+        index = start
+    }
+    lines.append(TOMLPhysicalLine(content: String(text[start...]), ending: ""))
+    return lines
+}
+
 func splitTOMLKeyPath(_ value: String) -> [String]? {
     var result: [String] = []
     var current = ""

@@ -98,6 +98,21 @@ struct TOMLSemanticsTests {
         #expect(MCPClientInstall.codexServerIsConfigured(server, in: merged.text))
     }
 
+    @Test func mixedLineEndingsRemainUnchangedOutsideTheServerTable() throws {
+        let prefix = "[unrelated]\r\nvalue = 1\n"
+        let serverTable = "[mcp_servers.demo]\r\ncommand = \"/old\"\nargs = [\"old\"]\r\n"
+        let suffix = "[tail]\nvalue = 2\r\n"
+        let original = prefix + serverTable + suffix
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(merged.text.hasPrefix(prefix))
+        #expect(merged.text.hasSuffix(suffix))
+        #expect(MCPClientInstall.codexServerIsConfigured(server, in: merged.text))
+    }
+
     @Test(
         "Incompatible mcp_servers ancestors are rejected",
         arguments: [
