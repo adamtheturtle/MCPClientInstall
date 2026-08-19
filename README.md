@@ -73,6 +73,7 @@ let result = try MCPClientInstall.installServer(
 
 let restored = try MCPClientInstall.restoreBackup(
     for: server,
+    format: location.format,
     at: configURL,
     displacedSuffix: ".my-server-before-restore"
 )
