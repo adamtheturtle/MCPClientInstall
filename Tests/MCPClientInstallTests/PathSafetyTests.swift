@@ -51,9 +51,8 @@ struct PathSafetyTests {
             name: "demo", command: "/demo", backupSuffix: "/tmp/stolen"
         )
 
-        #expect(throws: Never.self) { try addingMCPServer(explicit, toJSON: [:]) }
         #expect(throws: MCPServerSpec.ValidationError.unsafeBackupSuffix("/tmp/stolen")) {
-            try explicit.validate()
+            try addingMCPServer(explicit, toJSON: [:])
         }
     }
 
@@ -72,6 +71,18 @@ struct PathSafetyTests {
             try MCPClientInstall.writeConfig(Data("{}".utf8), to: file, backupSuffix: "../backup")
         }
         #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @Test func backupSuffixesRejectEmbeddedNUL() {
+        let suffix = ".bad\0suffix"
+        let server = MCPServerSpec(name: "demo", command: "/demo", backupSuffix: suffix)
+
+        #expect(throws: MCPServerSpec.ValidationError.unsafeBackupSuffix(suffix)) {
+            try addingMCPServer(server, toJSON: [:])
+        }
+        #expect(throws: MCPClientInstall.ConfigWriteError.unsafeBackupSuffix(suffix)) {
+            try MCPClientInstall.writeConfig(Data(), to: temporaryDirectory(), backupSuffix: suffix)
+        }
     }
 
     @Test func restoreRejectsAnEscapingDisplacedSuffixBeforeMovingEitherFile() throws {
