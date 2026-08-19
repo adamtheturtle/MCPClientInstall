@@ -16,6 +16,11 @@ extension MCPClientInstall {
             modified: Date,
             contents: Data
         )
+
+        var fileExisted: Bool {
+            if case .regular = self { return true }
+            return false
+        }
     }
 
     static func withConfigurationLock<Result>(

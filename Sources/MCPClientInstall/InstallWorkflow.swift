@@ -214,8 +214,8 @@ extension MCPClientInstall {
         at url: URL,
         hooks: InstallHooks
     ) throws -> InstallWorkflowResult {
-        let existed = configPathKind(at: url) == .regularFile
         let prepared = try prepareServerUpdate(server, format: format, at: url)
+        let existed = prepared.sourceIdentity.fileExisted
         hooks.afterPrepare?()
         do {
             try writeConfig(

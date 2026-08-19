@@ -6,6 +6,16 @@ import Testing
 
 @Suite("Install transaction isolation")
 struct TransactionIsolationTests {
+    @Test func preparedIdentityCarriesTheRollbackExistenceState() throws {
+        let directory = temporaryDirectory()
+        let missing = directory.appendingPathComponent("missing.json")
+        let existing = directory.appendingPathComponent("existing.json")
+        try Data("{}".utf8).write(to: existing)
+
+        #expect(!(try MCPClientInstall.configurationIdentity(at: missing)).fileExisted)
+        #expect((try MCPClientInstall.configurationIdentity(at: existing)).fileExisted)
+    }
+
     @Test func concurrentInstallsRetainBothServers() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         try Data("{}".utf8).write(to: file)
