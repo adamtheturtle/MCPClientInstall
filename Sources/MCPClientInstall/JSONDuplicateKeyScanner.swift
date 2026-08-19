@@ -7,12 +7,8 @@ extension MCPClientInstall {
             try scanner.scan()
         } catch let error as JSONConfigError {
             throw error
-        } catch JSONScanFailure.malformed {
+        } catch JSONScanFailure.malformed, JSONScanFailure.tooDeep {
             throw CocoaError(.propertyListReadCorrupt)
-        } catch {
-            // JSONSerialization remains the source of truth for general syntax
-            // errors outside the scanner's bounded nesting depth. This pass also
-            // retains duplicate-key information that Foundation would discard.
         }
     }
 }
