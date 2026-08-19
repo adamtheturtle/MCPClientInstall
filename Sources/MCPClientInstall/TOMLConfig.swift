@@ -167,12 +167,13 @@ public extension MCPClientInstall {
             .components(separatedBy: "\n")
             .joined(separator: newline)
 
+        let result: (text: String, alreadyPresent: Bool)
         switch scan.declaration {
         case .notDeclared:
             if let problem = codexConfigStructuralProblem(in: text) {
                 throw TOMLConfigError("The existing config is not valid TOML: \(problem).")
             }
-            return (text.isEmpty ? block : text + newline + block, false)
+            result = (text.isEmpty ? block : text + newline + block, false)
 
         case .table:
             guard let range = scan.tableLineRange else {
@@ -184,13 +185,20 @@ public extension MCPClientInstall {
                 range,
                 with: try codexTableReplacement(body: body, server: server)
             )
-            return (lines.map(stripCarriageReturn).joined(separator: newline), true)
+            result = (lines.map(stripCarriageReturn).joined(separator: newline), true)
 
         case .other:
             throw TOMLConfigError(
                 "The existing config declares \(server.name) in a form that cannot be safely rewritten."
             )
         }
+
+        do {
+            try validateCodexTOML(result.text)
+        } catch {
+            throw TOMLConfigError("The updated config is not valid TOML: \(error.localizedDescription)")
+        }
+        return result
     }
 
     /// The dominant physical line ending, used to avoid noisy whole-file diffs.
@@ -360,35 +368,4 @@ private extension Array where Element == String {
     func starts(with prefix: [String]) -> Bool {
         count >= prefix.count && Array(self.prefix(prefix.count)) == prefix
     }
-}
-
-private func tomlHeaderKeyPath(_ line: String) -> [String]? {
-    let array = line.hasPrefix("[[")
-    let opener = array ? "[[" : "["
-    let closer = array ? "]]" : "]"
-    guard line.hasPrefix(opener), let close = line.range(of: closer, options: .backwards) else { return nil }
-    let tail = line[close.upperBound...].trimmingCharacters(in: .whitespaces)
-    guard tail.isEmpty || tail.hasPrefix("#") else { return nil }
-    let start = line.index(line.startIndex, offsetBy: opener.count)
-    return splitTOMLKeyPath(String(line[start ..< close.lowerBound]))
-}
-
-private func tomlKeyValueKeyPath(_ line: String) -> [String]? {
-    var quote: Character?
-    var escaped = false
-    for index in line.indices {
-        let character = line[index]
-        if escaped { escaped = false; continue }
-        if quote == "\"", character == "\\" { escaped = true; continue }
-        if let activeQuote = quote {
-            if character == activeQuote { quote = nil }
-        } else if character == "\"" || character == "'" {
-            quote = character
-        } else if character == "=" {
-            return splitTOMLKeyPath(String(line[..<index]))
-        } else if character == "#" {
-            return nil
-        }
-    }
-    return nil
 }

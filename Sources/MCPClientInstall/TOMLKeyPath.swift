@@ -1,5 +1,57 @@
 import Foundation
 
+func tomlHeaderKeyPath(_ line: String) -> [String]? {
+    let array = line.hasPrefix("[[")
+    let opener = array ? "[[" : "["
+    let closer = array ? "]]" : "]"
+    guard line.hasPrefix(opener) else { return nil }
+    let start = line.index(line.startIndex, offsetBy: opener.count)
+    var index = start
+    var quote: Character?
+    var escaped = false
+    while index < line.endIndex {
+        let character = line[index]
+        if escaped {
+            escaped = false
+        } else if quote == "\"", character == "\\" {
+            escaped = true
+        } else if let activeQuote = quote {
+            if character == activeQuote { quote = nil }
+        } else if character == "\"" || character == "'" {
+            quote = character
+        } else if character == "#" {
+            return nil
+        } else if line[index...].hasPrefix(closer) {
+            let closeEnd = line.index(index, offsetBy: closer.count)
+            let tail = line[closeEnd...].trimmingCharacters(in: .whitespaces)
+            guard tail.isEmpty || tail.hasPrefix("#") else { return nil }
+            return splitTOMLKeyPath(String(line[start ..< index]))
+        }
+        index = line.index(after: index)
+    }
+    return nil
+}
+
+func tomlKeyValueKeyPath(_ line: String) -> [String]? {
+    var quote: Character?
+    var escaped = false
+    for index in line.indices {
+        let character = line[index]
+        if escaped { escaped = false; continue }
+        if quote == "\"", character == "\\" { escaped = true; continue }
+        if let activeQuote = quote {
+            if character == activeQuote { quote = nil }
+        } else if character == "\"" || character == "'" {
+            quote = character
+        } else if character == "=" {
+            return splitTOMLKeyPath(String(line[..<index]))
+        } else if character == "#" {
+            return nil
+        }
+    }
+    return nil
+}
+
 func splitTOMLKeyPath(_ value: String) -> [String]? {
     var result: [String] = []
     var current = ""
