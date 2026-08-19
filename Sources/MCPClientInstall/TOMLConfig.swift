@@ -245,7 +245,7 @@ public extension MCPClientInstall {
         }
 
         var result = Array(block.dropLast())
-        result.append(contentsOf: retained.filter { !$0.isEmpty })
+        result.append(contentsOf: retained)
         result.append("")
         return result
     }

@@ -64,6 +64,28 @@ struct TOMLSemanticsTests {
         }
     }
 
+    @Test func preservesBlankLinesInsideCustomMultilineStrings() throws {
+        let original = #"""
+        [mcp_servers.demo]
+        command = "/old"
+        args = ["old"]
+        note = """
+        one
+
+        two
+        """
+        """#
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(merged.text.contains("one\n\ntwo"))
+        #expect(throws: Never.self) {
+            try MCPClientInstall.validateCodexTOML(merged.text)
+        }
+    }
+
     @Test(
         "Incompatible mcp_servers ancestors are rejected",
         arguments: [
