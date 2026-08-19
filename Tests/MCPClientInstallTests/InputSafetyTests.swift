@@ -60,6 +60,20 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func rejectsNULInCommandsAndArguments() {
+        let command = MCPServerSpec(name: "demo", command: "/demo\0hidden")
+        let argument = MCPServerSpec(
+            name: "demo", command: "/demo", arguments: ["safe", "bad\0hidden"]
+        )
+
+        #expect(throws: MCPServerSpec.ValidationError.commandContainsNUL) {
+            try addingMCPServer(command, toJSON: [:])
+        }
+        #expect(throws: MCPServerSpec.ValidationError.argumentContainsNUL(index: 1)) {
+            try addingMCPServer(argument, toCodexTOML: "")
+        }
+    }
+
     @Test func installReportsInvalidServersConsistentlyAcrossFormats() throws {
         let directory = temporaryDirectory()
         for format in [MCPClientInstall.ConfigurationFormat.json, .codexTOML] {

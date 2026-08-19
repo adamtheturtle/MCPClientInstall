@@ -17,6 +17,8 @@ public struct MCPServerSpec: Sendable, Equatable {
     public enum ValidationError: Error, Equatable, Sendable {
         case blankName
         case blankCommand
+        case commandContainsNUL
+        case argumentContainsNUL(index: Int)
         case unsafeBackupSuffix(String)
     }
 
@@ -54,6 +56,12 @@ public struct MCPServerSpec: Sendable, Equatable {
         }
         if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw ValidationError.blankCommand
+        }
+        if command.contains("\0") {
+            throw ValidationError.commandContainsNUL
+        }
+        if let index = arguments.firstIndex(where: { $0.contains("\0") }) {
+            throw ValidationError.argumentContainsNUL(index: index)
         }
     }
 
