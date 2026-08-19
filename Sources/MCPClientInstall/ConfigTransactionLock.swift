@@ -16,8 +16,20 @@ extension MCPClientInstall {
         at configURL: URL,
         _ operation: () throws -> Result
     ) throws -> Result {
-        let lockURL = configURL.deletingLastPathComponent()
-            .appendingPathComponent(".\(configURL.lastPathComponent).mcp-client-install.lock")
+        let lockDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MCPClientInstall-locks", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: lockDirectory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            throw InstallWorkflowError.lockFailed(
+                url: lockDirectory, detail: error.localizedDescription
+            )
+        }
+        let lockURL = lockDirectory.appendingPathComponent("\(stableLockKey(for: configURL)).lock")
         let descriptor = lockURL.path.withCString {
             open($0, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
         }
@@ -36,6 +48,17 @@ extension MCPClientInstall {
         }
         defer { _ = flock(descriptor, LOCK_UN) }
         return try operation()
+    }
+
+    /// Lock files live in the process-temporary lock directory and intentionally
+    /// persist so concurrent and future waiters always open the same inode.
+    private static func stableLockKey(for configURL: URL) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in configURL.standardizedFileURL.path.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
     }
 
     static func configurationIdentity(at url: URL) throws -> ConfigurationIdentity {
