@@ -18,6 +18,7 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
 
     public enum ConfigurationLocationError: Error, Equatable, Sendable {
         case unsafeDirectoryComponent(String)
+        case nonFileHomeURL(URL)
         case outsideHomeDirectory(URL)
     }
 
@@ -64,6 +65,9 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
         }
 
         private func safeDirectory(components: [String], relativeTo homeDirectory: URL) throws -> URL {
+            guard homeDirectory.isFileURL else {
+                throw ConfigurationLocationError.nonFileHomeURL(homeDirectory)
+            }
             for component in components where !Self.isSafeDirectoryComponent(component) {
                 throw ConfigurationLocationError.unsafeDirectoryComponent(component)
             }
