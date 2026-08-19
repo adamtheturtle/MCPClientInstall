@@ -167,6 +167,29 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func replacementTemporaryContainsSecretsOnlyAtMode0600() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let replacement = Data(#"{"token":"secret"}"#.utf8)
+        try Data("{}".utf8).write(to: file)
+
+        try MCPClientInstall.writeConfig(
+            replacement,
+            to: file,
+            backupSuffix: ".backup",
+            beforeReplacing: {
+                let temporary = try #require(
+                    FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                        .first { $0.lastPathComponent.hasSuffix(".tmp") }
+                )
+                let attributes = try FileManager.default.attributesOfItem(atPath: temporary.path)
+                let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+                #expect(permissions.intValue & 0o777 == 0o600)
+                #expect(try Data(contentsOf: temporary) == replacement)
+            }
+        )
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
