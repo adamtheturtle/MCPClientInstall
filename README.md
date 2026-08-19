@@ -46,8 +46,11 @@ let merged = try addingMCPServer(server, toJSON: root)
 let data = try MCPClientInstall.prettyJSONData(from: merged.root)
 
 // TOML: Codex
-let existing = try String(contentsOf: configURL, encoding: .utf8)
-let updated = try addingMCPServer(server, toCodexTOML: existing)
+let updated = try MCPClientInstall.prepareServerUpdate(
+    server,
+    format: .codexTOML,
+    at: configURL
+)
 ```
 
 Writing is deliberately separate from merging, so an application can show a diff or
