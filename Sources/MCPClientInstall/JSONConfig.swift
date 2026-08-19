@@ -97,10 +97,43 @@ public extension MCPClientInstall {
 
     /// Pretty-printed JSON bytes for `root`, with sorted keys for a stable diff.
     static func prettyJSONData(from root: [String: Any]) throws -> Data {
-        guard JSONSerialization.isValidJSONObject(root) else {
+        var ancestors: Set<ObjectIdentifier> = []
+        guard hasBoundedAcyclicContainers(root, depth: 0, ancestors: &ancestors),
+              JSONSerialization.isValidJSONObject(root)
+        else {
             throw JSONConfigError.invalidJSONObject
         }
         return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    private static func hasBoundedAcyclicContainers(
+        _ value: Any,
+        depth: Int,
+        ancestors: inout Set<ObjectIdentifier>
+    ) -> Bool {
+        guard depth <= 128 else { return false }
+
+        if let dictionary = value as? NSDictionary {
+            let identity = ObjectIdentifier(dictionary)
+            guard ancestors.insert(identity).inserted else { return false }
+            defer { ancestors.remove(identity) }
+            for (key, child) in dictionary {
+                guard key is String,
+                      hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors)
+                else { return false }
+            }
+        } else if let array = value as? NSArray {
+            let identity = ObjectIdentifier(array)
+            guard ancestors.insert(identity).inserted else { return false }
+            defer { ancestors.remove(identity) }
+            for child in array {
+                guard hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors) else {
+                    return false
+                }
+            }
+        }
+
+        return true
     }
 
     static func boundedConfigurationData(at url: URL) throws -> Data {

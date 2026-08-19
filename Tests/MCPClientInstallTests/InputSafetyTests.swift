@@ -20,6 +20,26 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func cyclicFoundationContainersAreRejectedBeforeSerialization() {
+        let cycle = NSMutableDictionary()
+        cycle["self"] = cycle
+
+        #expect(throws: MCPClientInstall.JSONConfigError.invalidJSONObject) {
+            try MCPClientInstall.prettyJSONData(from: ["unrelated": cycle])
+        }
+    }
+
+    @Test func excessivelyDeepContainersAreRejectedBeforeSerialization() {
+        var value: Any = "leaf"
+        for _ in 0 ... 128 {
+            value = [value]
+        }
+
+        #expect(throws: MCPClientInstall.JSONConfigError.invalidJSONObject) {
+            try MCPClientInstall.prettyJSONData(from: ["deep": value])
+        }
+    }
+
     @Test func rejectsBlankServerIdentityAndCommandForEveryFormat() {
         #expect(throws: MCPServerSpec.ValidationError.blankName) {
             try addingMCPServer(MCPServerSpec(name: " \n", command: "/demo"), toJSON: [:])
