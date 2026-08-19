@@ -63,4 +63,19 @@ struct TOMLSemanticsTests {
             try MCPClientInstall.validateCodexTOML(merged.text)
         }
     }
+
+    @Test(
+        "Incompatible mcp_servers ancestors are rejected",
+        arguments: [
+            #"mcp_servers = "not a table""#,
+            #"mcp_servers = { demo = { command = "/old", args = ["old"] } }"#
+        ]
+    )
+    func incompatibleMCPServersAncestorsAreRejected(original: String) {
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        #expect(throws: MCPClientInstall.TOMLConfigError.self) {
+            try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+        }
+    }
 }

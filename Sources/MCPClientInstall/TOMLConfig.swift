@@ -109,6 +109,10 @@ public extension MCPClientInstall {
 
             guard let path = tomlKeyValueKeyPath(line) else { continue }
             let fullPath = currentTable + path
+            let serverPath = ["mcp_servers", serverName]
+            if serverPath.starts(with: fullPath), fullPath.count < serverPath.count {
+                hasUnsafeDeclaration = true
+            }
             if fullPath.starts(with: ["mcp_servers", serverName]),
                currentTable != ["mcp_servers", serverName] {
                 hasUnsafeDeclaration = true
