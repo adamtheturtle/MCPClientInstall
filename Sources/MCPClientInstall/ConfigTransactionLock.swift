@@ -9,7 +9,13 @@ import Glibc
 extension MCPClientInstall {
     enum ConfigurationIdentity: Equatable, Sendable {
         case absent
-        case regular(device: UInt64, inode: UInt64, size: UInt64, modified: Date)
+        case regular(
+            device: UInt64,
+            inode: UInt64,
+            size: UInt64,
+            modified: Date,
+            contents: Data
+        )
     }
 
     static func withConfigurationLock<Result>(
@@ -85,9 +91,20 @@ extension MCPClientInstall {
                     url: url, detail: "The file identity metadata is incomplete."
                 )
             }
-            return .regular(device: device, inode: inode, size: size, modified: modified)
+            let contents = try boundedConfigurationData(at: url)
+            return .regular(
+                device: device,
+                inode: inode,
+                size: size,
+                modified: modified,
+                contents: contents
+            )
         } catch let error as InstallWorkflowError {
             throw error
+        } catch let ConfigurationReadError.tooLarge(limit) {
+            throw InstallWorkflowError.configurationTooLarge(url: url, limit: limit)
+        } catch let ConfigurationReadError.unsafePath(kind) {
+            throw InstallWorkflowError.unsafePath(url: url, kind: kind)
         } catch {
             throw InstallWorkflowError.readFailed(url: url, detail: error.localizedDescription)
         }
