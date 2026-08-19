@@ -133,7 +133,8 @@ public enum MCPClientInstall {
         to url: URL,
         backupSuffix: String,
         beforeReplacing: () throws -> Void,
-        afterCommit: () throws -> Void = {}
+        afterCommit: () throws -> Void = {},
+        afterWritingTemporary: (URL) throws -> Void = { _ in }
     ) throws {
         guard data.count <= maxConfigurationFileBytes else {
             throw ConfigWriteError.configurationTooLarge(limit: maxConfigurationFileBytes)
@@ -147,22 +148,21 @@ public enum MCPClientInstall {
         }
         let manager = FileManager.default
         guard manager.fileExists(atPath: url.path) else {
-            let temporary = url.deletingLastPathComponent()
-                .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
-            do {
-                try writePrivateTemporary(data, to: temporary)
-                try beforeReplacing()
-                try manager.moveItem(at: temporary, to: url)
-            } catch {
-                try? manager.removeItem(at: temporary)
-                throw error
-            }
+            try writeAbsentConfig(
+                data,
+                to: url,
+                beforeReplacing: beforeReplacing,
+                afterWritingTemporary: afterWritingTemporary
+            )
             return
         }
 
         let temporary = url.deletingLastPathComponent()
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
-        try writePrivateTemporary(data, to: temporary)
+        let prepared = try preparePrivateTemporary(data, at: temporary)
+        defer { _ = close(prepared.descriptor) }
+        try afterWritingTemporary(temporary)
+        try requireBoundTemporary(prepared, contains: data)
 #if os(Linux)
         try replaceConfigOnLinux(
             at: url,
@@ -171,6 +171,7 @@ public enum MCPClientInstall {
             beforeReplacing: beforeReplacing,
             afterCommit: afterCommit
         )
+        try requireBoundTemporary(prepared, at: url, contains: data)
 #else
         do {
             try beforeReplacing()
@@ -180,43 +181,12 @@ public enum MCPClientInstall {
                 backupItemName: url.lastPathComponent + backupSuffix,
                 options: [.withoutDeletingBackupItem]
             )
+            try requireBoundTemporary(prepared, at: url, contains: data)
         } catch {
             try? manager.removeItem(at: temporary)
             throw error
         }
 #endif
-    }
-
-    private static func writePrivateTemporary(_ data: Data, to url: URL) throws {
-        let descriptor = url.path.withCString {
-            open($0, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, S_IRUSR | S_IWUSR)
-        }
-        guard descriptor >= 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-        let privateMode = mode_t(0o600)
-        guard fchmod(descriptor, privateMode) == 0 else {
-            let code = errno
-            close(descriptor)
-            try? FileManager.default.removeItem(at: url)
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
-        }
-        var status = stat()
-        guard fstat(descriptor, &status) == 0, status.st_mode & mode_t(0o777) == privateMode else {
-            let code = errno == 0 ? EACCES : errno
-            close(descriptor)
-            try? FileManager.default.removeItem(at: url)
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
-        }
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        do {
-            try handle.write(contentsOf: data)
-            try handle.close()
-        } catch {
-            try? handle.close()
-            try? FileManager.default.removeItem(at: url)
-            throw error
-        }
     }
 
 #if os(Linux)
