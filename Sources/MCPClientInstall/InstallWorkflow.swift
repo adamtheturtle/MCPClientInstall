@@ -100,7 +100,7 @@ extension MCPClientInstall {
         moveItem: (URL, URL) throws -> Void,
     ) throws -> RestoreWorkflowResult {
         do {
-            try server.validate()
+            try server.validateBackupPolicy()
         } catch let error as MCPServerSpec.ValidationError {
             throw InstallWorkflowError.invalidServer(error)
         }
