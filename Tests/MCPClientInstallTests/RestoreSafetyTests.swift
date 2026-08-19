@@ -176,11 +176,16 @@ struct RestoreSafetyTests {
             )
             Issue.record("Expected interrupted restoration")
         } catch let error as MCPClientInstall.InstallWorkflowError {
-            guard case let .restorationFailed(url, _) = error else {
+            // The exchange already took effect, so this is a committed restore
+            // with the previous configuration still at the backup path. Calling
+            // it a failure would invite a retry, which would accept that file as
+            // the backup and swap the restored configuration back out.
+            guard case let .restorationCommitted(url, displacedURL, _) = error else {
                 Issue.record("Unexpected error: \(error)")
                 return
             }
             #expect(url == file)
+            #expect(displacedURL == backup)
         }
         #expect(try Data(contentsOf: file) == Data(#"{"old":true}"#.utf8))
         #expect(try Data(contentsOf: backup) == Data("{}".utf8))

@@ -71,9 +71,14 @@ public struct MCPServerSpec: Sendable, Equatable {
         }
     }
 
+    /// Encodes a name into a filename-safe suffix.
+    ///
+    /// `_` introduces an escape, so it is escaped as well. Leaving it literal
+    /// would let two names encode identically and let one server's install
+    /// overwrite another's recoverable backup.
     private static func defaultBackupSuffix(for name: String) -> String {
         let encoded = name.utf8.map { byte -> String in
-            if byte.isASCIIAlphaNumeric || byte == UInt8(ascii: "-") || byte == UInt8(ascii: "_") {
+            if byte.isASCIIAlphaNumeric || byte == UInt8(ascii: "-") {
                 return String(Unicode.Scalar(byte))
             }
             return String(format: "_%02X", byte)

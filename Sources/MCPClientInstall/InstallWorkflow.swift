@@ -3,7 +3,20 @@ import Foundation
 private struct InstallHooks {
     let verificationOverride: (() -> Bool)?
     let afterPrepare: (() -> Void)?
+    let afterWrite: (() -> Void)?
     let removeItem: (URL) throws -> Void
+
+    init(
+        verificationOverride: (() -> Bool)?,
+        afterPrepare: (() -> Void)? = nil,
+        afterWrite: (() -> Void)? = nil,
+        removeItem: @escaping (URL) throws -> Void
+    ) {
+        self.verificationOverride = verificationOverride
+        self.afterPrepare = afterPrepare
+        self.afterWrite = afterWrite
+        self.removeItem = removeItem
+    }
 }
 
 public extension MCPClientInstall {
@@ -35,6 +48,9 @@ public extension MCPClientInstall {
         case displacedFileExists(url: URL)
         case unsafeSiblingSuffix(String)
         case restorationFailed(url: URL, detail: String)
+        /// The backup is live at `url`, but a later durability or cleanup step
+        /// failed. The previous configuration is at `displacedURL`.
+        case restorationCommitted(url: URL, displacedURL: URL, detail: String)
         case restorationRollbackFailed(
             url: URL, displacedURL: URL, backupURL: URL, detail: String
         )
@@ -94,82 +110,6 @@ public extension MCPClientInstall {
 }
 
 extension MCPClientInstall {
-    static func restoreBackup(
-        for server: MCPServerSpec,
-        format: ConfigurationFormat,
-        at url: URL,
-        displacedSuffix: String,
-        moveItem: @escaping (URL, URL) throws -> Void
-    ) throws -> RestoreWorkflowResult {
-        try restoreBackup(
-            for: server,
-            format: format,
-            at: url,
-            displacedSuffix: displacedSuffix,
-            hooks: .init(moveItem: moveItem)
-        )
-    }
-
-    static func restoreBackup(
-        for server: MCPServerSpec,
-        format: ConfigurationFormat,
-        at url: URL,
-        displacedSuffix: String,
-        hooks: RestoreHooks
-    ) throws -> RestoreWorkflowResult {
-        do {
-            try server.validateBackupPolicy()
-        } catch let error as MCPServerSpec.ValidationError {
-            throw InstallWorkflowError.invalidServer(error)
-        }
-        let backupURL = try sibling(of: url, suffix: server.backupSuffix)
-        try requireRegularBackup(at: backupURL)
-        let backupIdentity = try configurationIdentity(at: backupURL)
-        try validateBackup(at: backupURL, format: format)
-        try requireUnchanged(backupIdentity, at: backupURL)
-
-        let currentKind = configPathKind(at: url)
-        guard currentKind == .absent || currentKind == .regularFile else {
-            throw InstallWorkflowError.unsafePath(url: url, kind: currentKind)
-        }
-        guard currentKind == .regularFile else {
-            do {
-                try hooks.syncFile(backupURL)
-                try hooks.moveItem(backupURL, url)
-                try hooks.syncFile(url)
-                try hooks.syncDirectory(url.deletingLastPathComponent())
-                return RestoreWorkflowResult(displacedURL: nil)
-            } catch {
-                throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
-            }
-        }
-
-        let displacedURL = try sibling(of: url, suffix: displacedSuffix)
-        guard configPathKind(at: displacedURL) == .absent else {
-            throw InstallWorkflowError.displacedFileExists(url: displacedURL)
-        }
-        return try restoreOverExistingConfiguration(
-            state: .init(
-                format: format,
-                url: url,
-                backupURL: backupURL,
-                backupIdentity: backupIdentity,
-                displacedURL: displacedURL
-            ),
-            hooks: hooks
-        )
-    }
-
-    private static func requireRegularBackup(at backupURL: URL) throws {
-        let kind = configPathKind(at: backupURL)
-        if kind == .absent {
-            throw InstallWorkflowError.backupUnavailable(url: backupURL)
-        }
-        guard kind == .regularFile else {
-            throw InstallWorkflowError.unsafePath(url: backupURL, kind: kind)
-        }
-    }
-
     static func installServer(
         _ server: MCPServerSpec,
         format: ConfigurationFormat,
@@ -206,8 +146,20 @@ extension MCPClientInstall {
     ) throws -> InstallWorkflowResult {
         try installServer(server, format: format, at: url, hooks: .init(
             verificationOverride: verificationOverride,
-            afterPrepare: nil,
             removeItem: removeItem
+        ))
+    }
+
+    static func installServer(
+        _ server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        afterWrite: @escaping () -> Void,
+    ) throws -> InstallWorkflowResult {
+        try installServer(server, format: format, at: url, hooks: .init(
+            verificationOverride: nil,
+            afterWrite: afterWrite,
+            removeItem: { try FileManager.default.removeItem(at: $0) }
         ))
     }
 
@@ -256,8 +208,16 @@ extension MCPClientInstall {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }
 
+        hooks.afterWrite?()
         let committedIdentity = try configurationIdentity(at: url)
         let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
+        // Sampling the live path is not enough to claim the file as ours: a
+        // replacement landing between the commit and this read would be taken
+        // for the installed configuration, and a rollback would then displace
+        // and delete another writer's file.
+        guard committedIdentity.contents == prepared.data else {
+            throw InstallWorkflowError.verificationTargetChanged(url: url, backupURL: backupURL)
+        }
         let verified: Bool = if let verificationOverride = hooks.verificationOverride {
             verificationOverride()
         } else {
@@ -296,6 +256,13 @@ extension MCPClientInstall {
                     at: url,
                     displacedSuffix: ".verification-failed-\(UUID().uuidString)",
                     moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                )
+            } catch let error as InstallWorkflowError {
+                // A committed restore already names where each file ended up,
+                // which a rollback failure would discard.
+                if case .restorationCommitted = error { throw error }
+                throw InstallWorkflowError.verificationRollbackFailed(
+                    url: url, backupURL: backupURL, detail: String(describing: error)
                 )
             } catch {
                 throw InstallWorkflowError.verificationRollbackFailed(

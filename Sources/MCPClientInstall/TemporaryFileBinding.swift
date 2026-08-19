@@ -107,7 +107,9 @@ func requireBoundTemporary(
     guard duplicate >= 0 else { throw temporaryPOSIXError() }
     let handle = FileHandle(fileDescriptor: duplicate, closeOnDealloc: true)
     try handle.seek(toOffset: 0)
-    guard try handle.readToEnd() == expectedData else {
+    // ``readToEnd`` reports nil rather than empty data at end of file, which an
+    // intentionally empty payload reaches immediately.
+    guard try handle.readToEnd() ?? Data() == expectedData else {
         throw MCPClientInstall.InstallWorkflowError.configurationChanged(url: inspectedPath)
     }
 }

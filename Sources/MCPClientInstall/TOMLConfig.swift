@@ -117,7 +117,14 @@ public extension MCPClientInstall {
             if fullPath.starts(with: ["mcp_servers", serverName]),
                currentTable != ["mcp_servers", serverName] {
                 let relativePath = Array(fullPath.dropFirst(serverPath.count))
-                if relativePath[0] == "command" || relativePath[0] == "args",
+                guard let leadingKey = relativePath.first else {
+                    // The whole server is declared as one inline value, such as
+                    // ``mcp_servers.demo = { ... }``, which cannot be rewritten
+                    // key by key.
+                    hasUnsafeDeclaration = true
+                    continue
+                }
+                if leadingKey == "command" || leadingKey == "args",
                    currentTable != serverPath || path.count > 1 {
                     hasUnsafeDeclaration = true
                 }
@@ -234,7 +241,7 @@ public extension MCPClientInstall {
         let block = codexServerBlock(for: server).components(separatedBy: "\n")
         guard body.count > 1 else { return block }
 
-        var retained: [String] = []
+        var retained: [RetainedLine] = []
         var state = TOMLLineState()
         var removingOwnedValue = false
         for line in body.dropFirst() {
@@ -244,9 +251,10 @@ public extension MCPClientInstall {
                 removingOwnedValue = true
             }
 
+            let insideValue = state.isInsideMultilineConstruct
             state.consume(line)
             if !removingOwnedValue {
-                retained.append(line)
+                retained.append(RetainedLine(text: line, insideValue: insideValue))
             } else if !state.isInsideMultilineConstruct {
                 removingOwnedValue = false
             }
@@ -255,10 +263,27 @@ public extension MCPClientInstall {
             throw TOMLConfigError("The existing server table contains an unclosed value.")
         }
 
+        // The spacer appended below separates this table from the next one. Any
+        // blank line already at the end of the table is that same separator from
+        // an earlier rewrite, so keeping it as well would grow the file by a
+        // line on every update.
+        while let last = retained.last,
+              !last.insideValue,
+              last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            retained.removeLast()
+        }
+
         var result = Array(block.dropLast())
-        result.append(contentsOf: retained)
+        result.append(contentsOf: retained.map(\.text))
         result.append("")
         return result
+    }
+
+    /// A line kept from an existing server table, and whether its content lies
+    /// inside a multiline value rather than being structural.
+    private struct RetainedLine {
+        let text: String
+        let insideValue: Bool
     }
 
     private static func tomlBareKey(_ value: String) -> Bool {
@@ -310,81 +335,5 @@ private struct CodexServerValues: Decodable {
     private enum CodingKeys: String, CodingKey {
         case command
         case arguments = "args"
-    }
-}
-
-private struct TOMLLineState {
-    private enum StringState { case none, multilineBasic, multilineLiteral }
-    private var stringState = StringState.none
-    private var bracketDepth = 0
-
-    var isInsideMultilineConstruct: Bool {
-        stringState != .none || bracketDepth > 0
-    }
-
-    mutating func consume(_ line: String) {
-        var index = line.startIndex
-        while index < line.endIndex {
-            switch stringState {
-            case .multilineBasic:
-                if line[index] == "\\" {
-                    index = line.index(index, offsetBy: 2, limitedBy: line.endIndex) ?? line.endIndex
-                } else if line[index...].hasPrefix("\"\"\"") {
-                    stringState = .none
-                    index = line.index(index, offsetBy: 3)
-                } else {
-                    index = line.index(after: index)
-                }
-            case .multilineLiteral:
-                if line[index...].hasPrefix("'''") {
-                    stringState = .none
-                    index = line.index(index, offsetBy: 3)
-                } else {
-                    index = line.index(after: index)
-                }
-            case .none:
-                switch line[index] {
-                case "#": return
-                case "\"" where line[index...].hasPrefix("\"\"\""):
-                    stringState = .multilineBasic
-                    index = line.index(index, offsetBy: 3)
-                case "'" where line[index...].hasPrefix("'''"):
-                    stringState = .multilineLiteral
-                    index = line.index(index, offsetBy: 3)
-                case "\"":
-                    index = endOfString(in: line, from: line.index(after: index), quote: "\"", escaped: true)
-                case "'":
-                    index = endOfString(in: line, from: line.index(after: index), quote: "'", escaped: false)
-                case "[": bracketDepth += 1; index = line.index(after: index)
-                case "]": bracketDepth = max(0, bracketDepth - 1); index = line.index(after: index)
-                default: index = line.index(after: index)
-                }
-            }
-        }
-    }
-
-    private func endOfString(
-        in line: String,
-        from start: String.Index,
-        quote: Character,
-        escaped: Bool
-    ) -> String.Index {
-        var index = start
-        while index < line.endIndex {
-            if escaped, line[index] == "\\" {
-                index = line.index(index, offsetBy: 2, limitedBy: line.endIndex) ?? line.endIndex
-            } else if line[index] == quote {
-                return line.index(after: index)
-            } else {
-                index = line.index(after: index)
-            }
-        }
-        return index
-    }
-}
-
-private extension Array where Element == String {
-    func starts(with prefix: [String]) -> Bool {
-        count >= prefix.count && Array(self.prefix(prefix.count)) == prefix
     }
 }
