@@ -154,7 +154,7 @@ public extension MCPClientInstall {
         to text: String,
         server: MCPServerSpec
     ) throws -> (text: String, alreadyPresent: Bool) {
-        try server.validate()
+        try server.validateConfiguration()
         do {
             _ = try TOMLDecoder().decode(TOMLValidationDocument.self, from: text)
         } catch {

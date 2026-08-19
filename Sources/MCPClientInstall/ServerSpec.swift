@@ -40,19 +40,37 @@ public struct MCPServerSpec: Sendable, Equatable {
         self.name = name
         self.command = command
         self.arguments = arguments
-        self.backupSuffix = backupSuffix ?? ".\(name)-mcp-backup"
+        self.backupSuffix = backupSuffix ?? Self.defaultBackupSuffix(for: name)
     }
 
     func validate() throws {
+        try validateConfiguration()
+        try validateBackupSuffix()
+    }
+
+    func validateConfiguration() throws {
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw ValidationError.blankName
         }
         if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw ValidationError.blankCommand
         }
+    }
+
+    func validateBackupSuffix() throws {
         guard isSafeFilenameSuffix(backupSuffix) else {
             throw ValidationError.unsafeBackupSuffix(backupSuffix)
         }
+    }
+
+    private static func defaultBackupSuffix(for name: String) -> String {
+        let encoded = name.utf8.map { byte -> String in
+            if byte.isASCIIAlphaNumeric || byte == UInt8(ascii: "-") || byte == UInt8(ascii: "_") {
+                return String(Unicode.Scalar(byte))
+            }
+            return String(format: "_%02X", byte)
+        }.joined()
+        return ".\(encoded)-mcp-backup"
     }
 }
 
@@ -62,4 +80,12 @@ func isSafeFilenameSuffix(_ suffix: String) -> Bool {
         && suffix != ".."
         && !suffix.contains("/")
         && !suffix.contains("\\")
+}
+
+private extension UInt8 {
+    var isASCIIAlphaNumeric: Bool {
+        (UInt8(ascii: "0") ... UInt8(ascii: "9")).contains(self)
+            || (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains(self)
+            || (UInt8(ascii: "a") ... UInt8(ascii: "z")).contains(self)
+    }
 }

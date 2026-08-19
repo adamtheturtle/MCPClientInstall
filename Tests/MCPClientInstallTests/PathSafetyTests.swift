@@ -50,14 +50,19 @@ struct PathSafetyTests {
         let explicit = MCPServerSpec(
             name: "demo", command: "/demo", backupSuffix: "/tmp/stolen"
         )
-        let derived = MCPServerSpec(name: "../stolen", command: "/demo")
 
-        #expect(throws: MCPServerSpec.ValidationError.self) {
-            try addingMCPServer(explicit, toJSON: [:])
+        #expect(throws: Never.self) { try addingMCPServer(explicit, toJSON: [:]) }
+        #expect(throws: MCPServerSpec.ValidationError.unsafeBackupSuffix("/tmp/stolen")) {
+            try explicit.validate()
         }
-        #expect(throws: MCPServerSpec.ValidationError.self) {
-            try addingMCPServer(derived, toCodexTOML: "")
-        }
+    }
+
+    @Test func defaultBackupSuffixIsSafeForServerNamesWithSeparators() throws {
+        let server = MCPServerSpec(name: "team/server\\name", command: "/demo")
+
+        #expect(isSafeFilenameSuffix(server.backupSuffix))
+        #expect(try addingMCPServer(server, toJSON: [:]).root["mcpServers"] != nil)
+        #expect(try addingMCPServer(server, toCodexTOML: "").text.contains("team/server"))
     }
 
     @Test func directWritesRejectUnsafeBackupSuffixesWithoutCreatingAFile() throws {
