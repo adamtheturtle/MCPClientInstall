@@ -101,7 +101,7 @@ public extension MCPClientInstall {
                 if path.count == 2, !line.hasPrefix("[[") {
                     var bodyState = state
                     tableRanges.append(tableBody(startingAt: index, in: lines, state: &bodyState))
-                } else {
+                } else if path.count < 3 || path[2] == "command" || path[2] == "args" {
                     hasUnsafeDeclaration = true
                 }
                 continue
@@ -115,7 +115,11 @@ public extension MCPClientInstall {
             }
             if fullPath.starts(with: ["mcp_servers", serverName]),
                currentTable != ["mcp_servers", serverName] {
-                hasUnsafeDeclaration = true
+                let relativePath = Array(fullPath.dropFirst(serverPath.count))
+                if relativePath[0] == "command" || relativePath[0] == "args",
+                   currentTable != serverPath || path.count > 1 {
+                    hasUnsafeDeclaration = true
+                }
             }
         }
 
