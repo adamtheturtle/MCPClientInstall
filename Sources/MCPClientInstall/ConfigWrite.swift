@@ -49,6 +49,7 @@ public enum MCPClientInstall {
     public enum ConfigWriteError: Error, Equatable, Sendable {
         case unsafeBackupSuffix(String)
         case unsafePath(ConfigPathKind)
+        case configurationTooLarge(limit: Int)
     }
 
     /// Classifies the config path without following symlinks.
@@ -131,6 +132,9 @@ public enum MCPClientInstall {
         backupSuffix: String,
         beforeReplacing: () throws -> Void
     ) throws {
+        guard data.count <= maxConfigurationFileBytes else {
+            throw ConfigWriteError.configurationTooLarge(limit: maxConfigurationFileBytes)
+        }
         guard isSafeFilenameSuffix(backupSuffix) else {
             throw ConfigWriteError.unsafeBackupSuffix(backupSuffix)
         }

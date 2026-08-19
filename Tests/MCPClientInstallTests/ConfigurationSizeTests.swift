@@ -34,6 +34,19 @@ struct ConfigurationSizeTests {
         #expect(try fileSize(at: file) == sizeBefore)
     }
 
+    @Test func `public writes reject oversized output before creating a file`() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let data = Data(count: MCPClientInstall.maxConfigurationFileBytes + 1)
+
+        #expect(throws: MCPClientInstall.ConfigWriteError.configurationTooLarge(
+            limit: MCPClientInstall.maxConfigurationFileBytes
+        )) {
+            try MCPClientInstall.writeConfig(data, to: file, backupSuffix: ".backup")
+        }
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
     private func oversizedFile(named name: String) throws -> URL {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
