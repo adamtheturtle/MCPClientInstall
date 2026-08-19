@@ -24,11 +24,16 @@ let package = Package(
         .target(
             name: "MCPClientInstall",
             dependencies: [
+                "MCPClientInstallSystem",
                 .product(name: "TOML", package: "swift-toml")
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]
+        ),
+        .target(
+            name: "MCPClientInstallSystem",
+            publicHeadersPath: "include"
         ),
         .testTarget(
             name: "MCPClientInstallTests",

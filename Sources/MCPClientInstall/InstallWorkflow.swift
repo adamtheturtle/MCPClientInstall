@@ -1,4 +1,5 @@
 import Foundation
+import MCPClientInstallSystem
 
 private struct InstallHooks {
     let verificationOverride: (() -> Bool)?
@@ -85,6 +86,8 @@ public extension MCPClientInstall {
                 format: format,
                 at: url,
                 displacedSuffix: displacedSuffix,
+                exchangeItem: atomicExchange,
+                afterExchange: {},
                 moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
             )
         }
@@ -97,6 +100,8 @@ extension MCPClientInstall {
         format: ConfigurationFormat,
         at url: URL,
         displacedSuffix: String,
+        exchangeItem: (URL, URL) throws -> Void = atomicExchange,
+        afterExchange: () throws -> Void = {},
         moveItem: (URL, URL) throws -> Void,
     ) throws -> RestoreWorkflowResult {
         do {
@@ -126,26 +131,10 @@ extension MCPClientInstall {
             throw InstallWorkflowError.displacedFileExists(url: displacedURL)
         }
         do {
-            try moveItem(url, displacedURL)
-            do {
-                try moveItem(backupURL, url)
-            } catch let activationError {
-                do {
-                    try moveItem(displacedURL, url)
-                } catch let rollbackError {
-                    throw InstallWorkflowError.restorationRollbackFailed(
-                        url: url,
-                        displacedURL: displacedURL,
-                        backupURL: backupURL,
-                        detail: "activation: \(activationError.localizedDescription); "
-                            + "rollback: \(rollbackError.localizedDescription)"
-                    )
-                }
-                throw activationError
-            }
+            try exchangeItem(url, backupURL)
+            try afterExchange()
+            try moveItem(backupURL, displacedURL)
             return RestoreWorkflowResult(displacedURL: displacedURL)
-        } catch let error as InstallWorkflowError {
-            throw error
         } catch {
             throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
         }
@@ -352,5 +341,16 @@ extension MCPClientInstall {
             throw InstallWorkflowError.unsafeSiblingSuffix(suffix)
         }
         return candidate
+    }
+}
+
+private func atomicExchange(_ first: URL, _ second: URL) throws {
+    let result = first.path.withCString { firstPath in
+        second.path.withCString { secondPath in
+            mcp_atomic_exchange(firstPath, secondPath)
+        }
+    }
+    guard result == 0 else {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
 }

@@ -131,13 +131,12 @@ struct RestoreSafetyTests {
         #expect(try Data(contentsOf: backup) == backupData)
     }
 
-    @Test func aFailedRestoreAndFailedRollbackReportsEveryRecoveryPath() throws {
+    @Test func interruptionAfterExchangeNeverRemovesTheLiveConfiguration() throws {
         let directory = temporaryDirectory()
         let file = directory.appendingPathComponent("config.json")
         let backup = directory.appendingPathComponent("config.json.backup")
         try Data("{}".utf8).write(to: file)
         try Data(#"{"old":true}"#.utf8).write(to: backup)
-        var moveCount = 0
 
         do {
             _ = try MCPClientInstall.restoreBackup(
@@ -145,25 +144,20 @@ struct RestoreSafetyTests {
                 format: .json,
                 at: file,
                 displacedSuffix: ".displaced",
-                moveItem: { source, destination in
-                    moveCount += 1
-                    if moveCount == 1 {
-                        try FileManager.default.moveItem(at: source, to: destination)
-                    } else {
-                        throw InjectedFailure()
-                    }
-                }
+                afterExchange: { throw InjectedFailure() },
+                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
             )
-            Issue.record("Expected restoration rollback failure")
+            Issue.record("Expected interrupted restoration")
         } catch let error as MCPClientInstall.InstallWorkflowError {
-            guard case let .restorationRollbackFailed(url, displaced, recovery, _) = error else {
+            guard case let .restorationFailed(url, _) = error else {
                 Issue.record("Unexpected error: \(error)")
                 return
             }
             #expect(url == file)
-            #expect(displaced.lastPathComponent == "config.json.displaced")
-            #expect(recovery == backup)
         }
+        #expect(try Data(contentsOf: file) == Data(#"{"old":true}"#.utf8))
+        #expect(try Data(contentsOf: backup) == Data("{}".utf8))
+        #expect(MCPClientInstall.configPathKind(at: file) == .regularFile)
     }
 
     private func temporaryDirectory() -> URL {
