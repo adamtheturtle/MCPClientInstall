@@ -6,6 +6,7 @@
 //  without clobbering unrelated keys or a mistyped `mcpServers` value.
 //
 
+import CoreFoundation
 import Foundation
 
 public extension MCPClientInstall {
@@ -153,7 +154,15 @@ public extension MCPClientInstall {
         let identity = ObjectIdentifier(dictionary)
         guard ancestors.insert(identity).inserted else { return false }
         defer { ancestors.remove(identity) }
-        for (key, child) in dictionary {
+        let rawDictionary = unsafeBitCast(dictionary, to: CFDictionary.self)
+        let count = CFDictionaryGetCount(rawDictionary)
+        var keys = [UnsafeRawPointer?](repeating: nil, count: count)
+        var values = [UnsafeRawPointer?](repeating: nil, count: count)
+        CFDictionaryGetKeysAndValues(rawDictionary, &keys, &values)
+        for index in 0 ..< count {
+            guard let keyPointer = keys[index], let valuePointer = values[index] else { return false }
+            let key = Unmanaged<AnyObject>.fromOpaque(keyPointer).takeUnretainedValue()
+            let child = Unmanaged<AnyObject>.fromOpaque(valuePointer).takeUnretainedValue()
             guard key is String,
                   hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors)
             else { return false }
@@ -169,7 +178,10 @@ public extension MCPClientInstall {
         let identity = ObjectIdentifier(array)
         guard ancestors.insert(identity).inserted else { return false }
         defer { ancestors.remove(identity) }
-        for child in array {
+        let rawArray = unsafeBitCast(array, to: CFArray.self)
+        for index in 0 ..< CFArrayGetCount(rawArray) {
+            guard let pointer = CFArrayGetValueAtIndex(rawArray, index) else { return false }
+            let child = Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
             guard hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors) else {
                 return false
             }
