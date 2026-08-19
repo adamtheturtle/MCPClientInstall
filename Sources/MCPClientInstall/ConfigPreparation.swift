@@ -100,7 +100,9 @@ extension MCPClientInstall {
     }
 
     static func existingTOML(at url: URL) throws -> String {
-        guard FileManager.default.fileExists(atPath: url.path) else { return "" }
+        let kind = configPathKind(at: url)
+        guard kind != .absent else { return "" }
+        guard kind == .regularFile else { throw ConfigurationReadError.unsafePath(kind) }
         let data = try boundedConfigurationData(at: url)
         guard let text = String(data: data, encoding: .utf8) else {
             throw CocoaError(.fileReadInapplicableStringEncoding)

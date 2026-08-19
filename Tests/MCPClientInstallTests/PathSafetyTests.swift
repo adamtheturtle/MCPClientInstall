@@ -90,6 +90,20 @@ struct PathSafetyTests {
         }
     }
 
+    @Test func danglingSymlinksAreUnsafeForJSONAndTOMLReads() throws {
+        let directory = temporaryDirectory()
+        let target = directory.appendingPathComponent("missing")
+        let link = directory.appendingPathComponent("config")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(throws: MCPClientInstall.ConfigurationReadError.self) {
+            try MCPClientInstall.existingJSON(at: link)
+        }
+        #expect(throws: MCPClientInstall.ConfigurationReadError.self) {
+            try MCPClientInstall.existingTOML(at: link)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
