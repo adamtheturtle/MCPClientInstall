@@ -78,7 +78,9 @@ public extension MCPClientInstall {
     /// file is absent or whitespace-only. A malformed file throws so we don't
     /// silently clobber it.
     static func existingJSON(at url: URL) throws -> [String: Any] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        let kind = configPathKind(at: url)
+        guard kind != .absent else { return [:] }
+        guard kind == .regularFile else { throw ConfigurationReadError.unsafePath(kind) }
 
         let data = try boundedConfigurationData(at: url)
         // Whitespace-only counts as blank. A file holding just a newline is empty
