@@ -7,6 +7,29 @@ import Testing
 struct RestoreSafetyTests {
     private let server = MCPServerSpec(name: "demo", command: "/demo", backupSuffix: ".backup")
 
+    @Test func unsafeBackupPathsPreserveTheirClassification() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        let target = directory.appendingPathComponent("outside.json")
+        try Data("{}".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: backup, withDestinationURL: target)
+
+        do {
+            _ = try MCPClientInstall.restoreBackup(
+                for: server, format: .json, at: file, displacedSuffix: ".displaced"
+            )
+            Issue.record("Expected unsafe backup path")
+        } catch let error as MCPClientInstall.InstallWorkflowError {
+            guard case let .unsafePath(url, .symbolicLink(destination)) = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+            #expect(url == backup)
+            #expect(!destination.isEmpty)
+        }
+    }
+
     @Test func failedVerificationRemovesANewConfiguration() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
 
