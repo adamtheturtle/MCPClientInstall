@@ -94,6 +94,22 @@ struct InputSafetyTests {
         #expect(!FileManager.default.fileExists(atPath: sidecar.path))
     }
 
+    @Test func invalidServerTakesPriorityOverUnsafeConfigurationPath() throws {
+        let directory = temporaryDirectory()
+        let target = directory.appendingPathComponent("target")
+        let link = directory.appendingPathComponent("config.json")
+        try Data("{}".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.invalidServer(.blankName)) {
+            try MCPClientInstall.installServer(
+                MCPServerSpec(name: " ", command: "/demo"),
+                format: .json,
+                at: link
+            )
+        }
+    }
+
     @Test func restoreReportsInvalidServersAsWorkflowErrors() {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         do {

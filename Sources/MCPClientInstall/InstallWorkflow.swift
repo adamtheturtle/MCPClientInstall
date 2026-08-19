@@ -207,7 +207,12 @@ extension MCPClientInstall {
         at url: URL,
         hooks: InstallHooks
     ) throws -> InstallWorkflowResult {
-        try withConfigurationLock(at: url) {
+        do {
+            try server.validate()
+        } catch let error as MCPServerSpec.ValidationError {
+            throw InstallWorkflowError.invalidServer(error)
+        }
+        return try withConfigurationLock(at: url) {
             try installServerLocked(
                 server,
                 format: format,
