@@ -95,6 +95,9 @@ The package has no UI and never searches for or modifies configuration on import
 
 ## Requirements
 
+MCPClientInstall depends on `swift-toml`, including its C++ `toml++` parser target,
+so consumers need a Swift toolchain with C++ interoperability support.
+
 - Swift 6.2+
 - macOS 14+
 - Linux with a Swift 6.2 toolchain
