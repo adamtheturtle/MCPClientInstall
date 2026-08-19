@@ -3,16 +3,18 @@ import Foundation
 
 extension MCPClientInstall {
     static func replaceConfigOnDarwin(
+        in directory: BoundConfigurationDirectory,
         prepared: PreparedTemporary,
-        at url: URL,
         backupSuffix: String,
         targetIdentity: ConfigurationIdentity,
         hooks: ConfigWriteHooks
     ) throws {
+        let url = directory.operationalURL
         do {
             try hooks.beforeReplacing()
             try requireUnchanged(targetIdentity, at: url)
             try hooks.afterCheckingTarget()
+            try directory.requireStillNamed()
             _ = try FileManager.default.replaceItemAt(
                 url,
                 withItemAt: prepared.url,
@@ -25,7 +27,7 @@ extension MCPClientInstall {
             guard try configurationIdentity(at: backup) == targetIdentity else {
                 try atomicExchange(url, backup)
                 try syncConfigurationDirectory(at: url.deletingLastPathComponent())
-                throw InstallWorkflowError.configurationChanged(url: url)
+                throw InstallWorkflowError.configurationChanged(url: directory.displayURL)
             }
         } catch {
             try? FileManager.default.removeItem(at: prepared.url)

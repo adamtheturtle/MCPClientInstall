@@ -152,6 +152,28 @@ public enum MCPClientInstall {
         guard data.count <= maxConfigurationFileBytes else {
             throw ConfigWriteError.configurationTooLarge(limit: maxConfigurationFileBytes)
         }
+        let directory = try BoundConfigurationDirectory(containing: url)
+        do {
+            try writeConfigBound(
+                data,
+                in: directory,
+                backupSuffix: backupSuffix,
+                hooks: hooks
+            )
+        } catch {
+            try directory.requireStillNamed()
+            throw error
+        }
+        try directory.requireStillNamed()
+    }
+
+    private static func writeConfigBound(
+        _ data: Data,
+        in directory: BoundConfigurationDirectory,
+        backupSuffix: String,
+        hooks: ConfigWriteHooks
+    ) throws {
+        let url = directory.operationalURL
         guard isSafeFilenameSuffix(backupSuffix) else {
             throw ConfigWriteError.unsafeBackupSuffix(backupSuffix)
         }
@@ -161,7 +183,7 @@ public enum MCPClientInstall {
         }
         let targetIdentity = try configurationIdentity(at: url)
         guard targetIdentity.fileExisted else {
-            try writeAbsentConfig(data, to: url, identity: targetIdentity, hooks: hooks)
+            try writeAbsentConfig(data, in: directory, identity: targetIdentity, hooks: hooks)
             return
         }
 
@@ -173,7 +195,7 @@ public enum MCPClientInstall {
         try requireBoundTemporary(prepared, contains: data)
 #if os(Linux)
         try replaceConfigOnLinux(
-            at: url,
+            in: directory,
             with: temporary,
             backupSuffix: backupSuffix,
             targetIdentity: targetIdentity,
@@ -182,8 +204,8 @@ public enum MCPClientInstall {
         try requireBoundTemporary(prepared, at: url, contains: data)
 #else
         try replaceConfigOnDarwin(
+            in: directory,
             prepared: prepared,
-            at: url,
             backupSuffix: backupSuffix,
             targetIdentity: targetIdentity,
             hooks: hooks
@@ -198,12 +220,14 @@ public enum MCPClientInstall {
     /// point the live path therefore names either the complete old or complete new
     /// configuration.
     private static func replaceConfigOnLinux(
-        at url: URL,
+        in boundDirectory: BoundConfigurationDirectory,
         with temporary: URL,
         backupSuffix: String,
         targetIdentity: ConfigurationIdentity,
         hooks: ConfigWriteHooks
     ) throws {
+        let url = boundDirectory.operationalURL
+        let displayURL = boundDirectory.displayURL
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
         let backup = directory.appendingPathComponent(url.lastPathComponent + backupSuffix)
@@ -222,20 +246,18 @@ public enum MCPClientInstall {
             try hooks.beforeReplacing()
             try requireUnchanged(targetIdentity, at: url)
             try hooks.afterCheckingTarget()
+            try boundDirectory.requireStillNamed()
             try atomicExchange(temporary, url)
             installedCurrent = true
             guard try configurationIdentity(at: temporary) == targetIdentity else {
                 try atomicExchange(temporary, url)
                 installedCurrent = false
-                throw InstallWorkflowError.configurationChanged(url: url)
+                throw InstallWorkflowError.configurationChanged(url: displayURL)
             }
             try manager.moveItem(at: temporary, to: backup)
-            try syncFile(at: backup)
-            try syncDirectory(at: directory)
+            try syncBackup(backup, in: directory)
             try hooks.afterCommit()
-            if let permissions {
-                try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
-            }
+            try applyPermissions(permissions, to: url)
             try syncDirectory(at: directory)
 
             if parkedPreviousBackup {
@@ -264,6 +286,18 @@ public enum MCPClientInstall {
         guard descriptor >= 0 else { throw posixError() }
         defer { _ = Glibc.close(descriptor) }
         guard Glibc.fsync(descriptor) == 0 else { throw posixError() }
+    }
+
+    private static func syncBackup(_ backup: URL, in directory: URL) throws {
+        try syncFile(at: backup)
+        try syncDirectory(at: directory)
+    }
+
+    private static func applyPermissions(_ permissions: Any?, to url: URL) throws {
+        guard let permissions else { return }
+        try FileManager.default.setAttributes(
+            [.posixPermissions: permissions], ofItemAtPath: url.path
+        )
     }
 
     private static func syncDirectory(at url: URL) throws {
