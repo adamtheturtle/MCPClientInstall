@@ -45,7 +45,7 @@ struct JSONSafetyTests {
         "Trailing commas are rejected in objects and arrays",
         arguments: [
             #"{"mcpServers": {},}"#,
-            #"{"mcpServers": {"demo": {"args": ["one",]}}}"#,
+            #"{"mcpServers": {"demo": {"args": ["one",]}}}"#
         ]
     )
     func trailingCommasAreRejected(text: String) throws {
