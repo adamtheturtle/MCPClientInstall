@@ -132,9 +132,22 @@ public enum MCPClientInstall {
         _ data: Data,
         to url: URL,
         backupSuffix: String,
-        beforeReplacing: () throws -> Void,
-        afterCommit: () throws -> Void = {},
-        afterWritingTemporary: (URL) throws -> Void = { _ in }
+        beforeReplacing: @escaping () throws -> Void,
+        afterCommit: @escaping () throws -> Void = {}
+    ) throws {
+        try writeConfig(
+            data,
+            to: url,
+            backupSuffix: backupSuffix,
+            hooks: .init(beforeReplacing: beforeReplacing, afterCommit: afterCommit)
+        )
+    }
+
+    static func writeConfig(
+        _ data: Data,
+        to url: URL,
+        backupSuffix: String,
+        hooks: ConfigWriteHooks
     ) throws {
         guard data.count <= maxConfigurationFileBytes else {
             throw ConfigWriteError.configurationTooLarge(limit: maxConfigurationFileBytes)
@@ -146,14 +159,9 @@ public enum MCPClientInstall {
         guard targetKind == .absent || targetKind == .regularFile else {
             throw ConfigWriteError.unsafePath(targetKind)
         }
-        let manager = FileManager.default
-        guard manager.fileExists(atPath: url.path) else {
-            try writeAbsentConfig(
-                data,
-                to: url,
-                beforeReplacing: beforeReplacing,
-                afterWritingTemporary: afterWritingTemporary
-            )
+        let targetIdentity = try configurationIdentity(at: url)
+        guard targetIdentity.fileExisted else {
+            try writeAbsentConfig(data, to: url, identity: targetIdentity, hooks: hooks)
             return
         }
 
@@ -161,31 +169,25 @@ public enum MCPClientInstall {
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
         let prepared = try preparePrivateTemporary(data, at: temporary)
         defer { _ = close(prepared.descriptor) }
-        try afterWritingTemporary(temporary)
+        try hooks.afterWritingTemporary(temporary)
         try requireBoundTemporary(prepared, contains: data)
 #if os(Linux)
         try replaceConfigOnLinux(
             at: url,
             with: temporary,
             backupSuffix: backupSuffix,
-            beforeReplacing: beforeReplacing,
-            afterCommit: afterCommit
+            targetIdentity: targetIdentity,
+            hooks: hooks
         )
         try requireBoundTemporary(prepared, at: url, contains: data)
 #else
-        do {
-            try beforeReplacing()
-            _ = try manager.replaceItemAt(
-                url,
-                withItemAt: temporary,
-                backupItemName: url.lastPathComponent + backupSuffix,
-                options: [.withoutDeletingBackupItem]
-            )
-            try requireBoundTemporary(prepared, at: url, contains: data)
-        } catch {
-            try? manager.removeItem(at: temporary)
-            throw error
-        }
+        try replaceConfigOnDarwin(
+            prepared: prepared,
+            at: url,
+            backupSuffix: backupSuffix,
+            targetIdentity: targetIdentity,
+            hooks: hooks
+        )
 #endif
     }
 
@@ -199,33 +201,38 @@ public enum MCPClientInstall {
         at url: URL,
         with temporary: URL,
         backupSuffix: String,
-        beforeReplacing: () throws -> Void,
-        afterCommit: () throws -> Void
+        targetIdentity: ConfigurationIdentity,
+        hooks: ConfigWriteHooks
     ) throws {
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
         let backup = directory.appendingPathComponent(url.lastPathComponent + backupSuffix)
         let previousBackup = directory
             .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).previous-backup")
-        var parkedPreviousBackup = false
-        var installedCurrent = false
+        var (parkedPreviousBackup, installedCurrent) = (false, false)
 
         do {
-            try beforeReplacing()
             if manager.fileExists(atPath: backup.path) {
                 try manager.moveItem(at: backup, to: previousBackup)
                 parkedPreviousBackup = true
             }
 
             let permissions = try manager.attributesOfItem(atPath: url.path)[.posixPermissions]
-            try manager.copyItem(at: url, to: backup)
+            try syncFile(at: temporary)
+            try hooks.beforeReplacing()
+            try requireUnchanged(targetIdentity, at: url)
+            try hooks.afterCheckingTarget()
+            try atomicExchange(temporary, url)
+            installedCurrent = true
+            guard try configurationIdentity(at: temporary) == targetIdentity else {
+                try atomicExchange(temporary, url)
+                installedCurrent = false
+                throw InstallWorkflowError.configurationChanged(url: url)
+            }
+            try manager.moveItem(at: temporary, to: backup)
             try syncFile(at: backup)
             try syncDirectory(at: directory)
-            try syncFile(at: temporary)
-            try beforeReplacing()
-            try renameReplacing(temporary, with: url)
-            installedCurrent = true
-            try afterCommit()
+            try hooks.afterCommit()
             if let permissions {
                 try manager.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
             }
@@ -250,15 +257,6 @@ public enum MCPClientInstall {
             }
             throw committedError ?? error
         }
-    }
-
-    private static func renameReplacing(_ source: URL, with destination: URL) throws {
-        let result = source.path.withCString { sourcePath in
-            destination.path.withCString { destinationPath in
-                Glibc.rename(sourcePath, destinationPath)
-            }
-        }
-        guard result == 0 else { throw posixError() }
     }
 
     private static func syncFile(at url: URL) throws {

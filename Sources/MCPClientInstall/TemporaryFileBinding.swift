@@ -9,22 +9,44 @@ import Glibc
 struct PreparedTemporary {
     let url: URL
     let descriptor: Int32
+    let data: Data
+}
+
+struct ConfigWriteHooks {
+    let beforeReplacing: () throws -> Void
+    let afterCommit: () throws -> Void
+    let afterWritingTemporary: (URL) throws -> Void
+    let afterCheckingTarget: () throws -> Void
+
+    init(
+        beforeReplacing: @escaping () throws -> Void,
+        afterCommit: @escaping () throws -> Void = {},
+        afterWritingTemporary: @escaping (URL) throws -> Void = { _ in },
+        afterCheckingTarget: @escaping () throws -> Void = {}
+    ) {
+        self.beforeReplacing = beforeReplacing
+        self.afterCommit = afterCommit
+        self.afterWritingTemporary = afterWritingTemporary
+        self.afterCheckingTarget = afterCheckingTarget
+    }
 }
 
 func writeAbsentConfig(
     _ data: Data,
     to url: URL,
-    beforeReplacing: () throws -> Void,
-    afterWritingTemporary: (URL) throws -> Void
+    identity: MCPClientInstall.ConfigurationIdentity,
+    hooks: ConfigWriteHooks
 ) throws {
     let temporary = url.deletingLastPathComponent()
         .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
     do {
         let prepared = try preparePrivateTemporary(data, at: temporary)
         defer { _ = close(prepared.descriptor) }
-        try afterWritingTemporary(temporary)
+        try hooks.afterWritingTemporary(temporary)
         try requireBoundTemporary(prepared, contains: data)
-        try beforeReplacing()
+        try hooks.beforeReplacing()
+        try MCPClientInstall.requireUnchanged(identity, at: url)
+        try hooks.afterCheckingTarget()
         try FileManager.default.moveItem(at: temporary, to: url)
         try requireBoundTemporary(prepared, at: url, contains: data)
     } catch {
@@ -50,7 +72,7 @@ func preparePrivateTemporary(_ data: Data, at url: URL) throws -> PreparedTempor
     do {
         try handle.write(contentsOf: data)
         try handle.synchronize()
-        return PreparedTemporary(url: url, descriptor: descriptor)
+        return PreparedTemporary(url: url, descriptor: descriptor, data: data)
     } catch {
         _ = close(descriptor)
         try? FileManager.default.removeItem(at: url)
