@@ -93,6 +93,21 @@ struct TransactionIsolationTests {
         #expect(try String(contentsOf: parked, encoding: .utf8) == "{}")
     }
 
+    @Test func sameSizeAndModificationDateCannotHideContentChanges() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data(#"{"value":"one"}"#.utf8).write(to: file)
+        let identity = try MCPClientInstall.configurationIdentity(at: file)
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        let modified = try #require(attributes[.modificationDate] as? Date)
+
+        try Data(#"{"value":"two"}"#.utf8).write(to: file)
+        try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: file.path)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.configurationChanged(url: file)) {
+            try MCPClientInstall.requireUnchanged(identity, at: file)
+        }
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
