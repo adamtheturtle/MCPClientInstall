@@ -209,6 +209,39 @@ struct RestoreSafetyTests {
         #expect(syncedDirectories == [directory, directory])
     }
 
+    @Test func restoreRejectsACurrentPathSwapBeforeExchange() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        let parked = directory.appendingPathComponent("parked.json")
+        let linkTarget = directory.appendingPathComponent("link-target.json")
+        try Data("{}".utf8).write(to: file)
+        try Data(#"{"old":true}"#.utf8).write(to: backup)
+        try Data(#"{"attacker":true}"#.utf8).write(to: linkTarget)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.configurationChanged(url: file)) {
+            try MCPClientInstall.restoreBackup(
+                for: server,
+                format: .json,
+                at: file,
+                displacedSuffix: ".displaced",
+                beforeExchange: {
+                    try FileManager.default.moveItem(at: file, to: parked)
+                    try FileManager.default.createSymbolicLink(
+                        at: file, withDestinationURL: linkTarget
+                    )
+                },
+                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+            )
+        }
+
+        #expect(MCPClientInstall.configPathKind(at: file) == .symbolicLink(
+            destination: linkTarget.path
+        ))
+        #expect(try Data(contentsOf: backup) == Data(#"{"old":true}"#.utf8))
+        #expect(!FileManager.default.fileExists(atPath: file.path + ".displaced"))
+    }
+
     private func temporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
