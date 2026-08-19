@@ -33,10 +33,11 @@ struct ConfigWriteHooks {
 
 func writeAbsentConfig(
     _ data: Data,
-    to url: URL,
+    in directory: BoundConfigurationDirectory,
     identity: MCPClientInstall.ConfigurationIdentity,
     hooks: ConfigWriteHooks
 ) throws {
+    let url = directory.operationalURL
     let temporary = url.deletingLastPathComponent()
         .appendingPathComponent(".mcp-client-install-\(UUID().uuidString).tmp")
     do {
@@ -47,6 +48,7 @@ func writeAbsentConfig(
         try hooks.beforeReplacing()
         try MCPClientInstall.requireUnchanged(identity, at: url)
         try hooks.afterCheckingTarget()
+        try directory.requireStillNamed()
         try FileManager.default.moveItem(at: temporary, to: url)
         try requireBoundTemporary(prepared, at: url, contains: data)
     } catch {

@@ -1,10 +1,53 @@
 import Foundation
 import Testing
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 @testable import MCPClientInstall
 
 @Suite("Path safety")
 struct PathSafetyTests {
+    @Test func aParentDirectorySwapCannotRedirectTheTransaction() throws {
+        let root = temporaryDirectory()
+        let selected = root.appendingPathComponent("selected", isDirectory: true)
+        let parked = root.appendingPathComponent("parked")
+        let outside = temporaryDirectory()
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        let file = selected.appendingPathComponent("config.json")
+        let parkedFile = parked.appendingPathComponent("config.json")
+        let outsideFile = outside.appendingPathComponent("config.json")
+        try Data("{}".utf8).write(to: file)
+        try Data(#"{"outside":true}"#.utf8).write(to: outsideFile)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.configurationChanged(url: file)) {
+            try MCPClientInstall.writeConfig(
+                Data(#"{"approved":true}"#.utf8),
+                to: file,
+                backupSuffix: ".backup",
+                hooks: .init(
+                    beforeReplacing: {},
+                    afterCheckingTarget: {
+                        guard rename(selected.path, parked.path) == 0,
+                              symlink(outside.path, selected.path) == 0
+                        else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+                    }
+                )
+            )
+        }
+
+        #expect(try Data(contentsOf: outsideFile) == Data(#"{"outside":true}"#.utf8))
+        let parkedBackup = parked.appendingPathComponent("config.json.backup")
+        let recoverableData = try Data(contentsOf:
+            FileManager.default.fileExists(atPath: parkedFile.path) ? parkedFile : parkedBackup
+        )
+        #expect(recoverableData == Data("{}".utf8)
+            || recoverableData == Data(#"{"approved":true}"#.utf8))
+    }
+
     @Test(
         "Configuration directories reject traversal and embedded separators",
         arguments: ["..", ".", "nested/path", "nested\\path", "nul\0component", ""]
