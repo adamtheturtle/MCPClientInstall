@@ -1,4 +1,5 @@
 #if !os(Linux)
+import Darwin
 import Foundation
 
 extension MCPClientInstall {
@@ -25,18 +26,33 @@ extension MCPClientInstall {
             let backup = url.deletingLastPathComponent()
                 .appendingPathComponent(url.lastPathComponent + backupSuffix)
             guard try configurationIdentity(at: backup) == targetIdentity else {
-                try atomicExchange(url, backup)
-                // The exchange put the concurrent file back at the live path and
-                // the rejected replacement at the backup path. Leaving it there
-                // would let a later restore revive a replacement this install
-                // refused and overwrite the file it just preserved.
-                try FileManager.default.removeItem(at: backup)
+                // The backup holds the file another writer put at the live path
+                // and the live path holds the replacement this install refuses.
+                // One rename restores the concurrent file and unlinks the
+                // refusal together, so no half-undone state can leave a refused
+                // replacement at the backup path for a later restore to revive.
+                try moveItem(at: backup, replacing: url)
                 try syncConfigurationDirectory(at: url.deletingLastPathComponent())
                 throw InstallWorkflowError.configurationChanged(url: directory.displayURL)
             }
         } catch {
             try? FileManager.default.removeItem(at: prepared.url)
             throw error
+        }
+    }
+
+    /// Moves `source` onto `destination`, replacing and unlinking whatever is
+    /// there, in one operation.
+    ///
+    /// `FileManager.moveItem` refuses an existing destination, which would
+    /// leave the caller undoing a replacement in two steps that can fail
+    /// between them.
+    private static func moveItem(at source: URL, replacing destination: URL) throws {
+        let result = source.path.withCString { from in
+            destination.path.withCString { to in rename(from, to) }
+        }
+        guard result == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
     }
 }
