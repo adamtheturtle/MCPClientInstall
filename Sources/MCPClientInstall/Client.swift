@@ -9,6 +9,12 @@
 
 import Foundation
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 /// An MCP desktop client this package can install a server entry into.
 public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Sendable {
     case claudeDesktop
@@ -79,7 +85,32 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
             guard candidate == home || candidate.path.hasPrefix(homePath) else {
                 throw ConfigurationLocationError.outsideHomeDirectory(candidate)
             }
+            try Self.validateNoFollowTraversal(components: components, home: home)
             return candidate
+        }
+
+        private static func validateNoFollowTraversal(
+            components: [String],
+            home: URL
+        ) throws {
+            var descriptor = open(home.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+            if descriptor < 0, errno == ENOENT { return }
+            guard descriptor >= 0 else {
+                throw ConfigurationLocationError.outsideHomeDirectory(home)
+            }
+            defer { close(descriptor) }
+
+            for component in components {
+                let child = openat(descriptor, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+                if child >= 0 {
+                    close(descriptor)
+                    descriptor = child
+                } else if errno == ENOENT {
+                    return
+                } else {
+                    throw ConfigurationLocationError.unsafeDirectoryComponent(component)
+                }
+            }
         }
 
         private static func isSafeDirectoryComponent(_ component: String) -> Bool {

@@ -46,6 +46,36 @@ struct PathSafetyTests {
         }
     }
 
+    @Test func configurationDirectoriesRejectSymlinkedComponents() throws {
+        let home = temporaryDirectory()
+        let outside = temporaryDirectory()
+        let link = home.appendingPathComponent("escape", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        let location = MCPDesktopClient.ConfigurationLocation(
+            directoryComponents: ["escape"],
+            fallbackDirectoryComponents: [],
+            fileName: "config.json",
+            format: .json
+        )
+
+        #expect(throws: MCPDesktopClient.ConfigurationLocationError.self) {
+            try location.directory(relativeTo: home)
+        }
+    }
+
+    @Test func canonicalClientDirectorySymlinksAreRejected() throws {
+        let home = temporaryDirectory()
+        let outside = temporaryDirectory()
+        try FileManager.default.createSymbolicLink(
+            at: home.appendingPathComponent(".codex", isDirectory: true),
+            withDestinationURL: outside
+        )
+
+        #expect(throws: MCPDesktopClient.ConfigurationLocationError.self) {
+            try MCPDesktopClient.codex.configurationLocation.directory(relativeTo: home)
+        }
+    }
+
     @Test func serverBackupSuffixCannotEscapeTheConfigurationDirectory() {
         let explicit = MCPServerSpec(
             name: "demo", command: "/demo", backupSuffix: "/tmp/stolen"
