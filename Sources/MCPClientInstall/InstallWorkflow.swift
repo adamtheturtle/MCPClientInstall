@@ -21,6 +21,7 @@ public extension MCPClientInstall {
         case invalidConfiguration(url: URL, detail: String)
         case invalidServer(MCPServerSpec.ValidationError)
         case configurationChanged(url: URL)
+        case multiplyLinkedConfiguration(url: URL, linkCount: UInt64)
         case lockFailed(url: URL, detail: String)
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)

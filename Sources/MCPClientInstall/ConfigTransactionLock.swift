@@ -96,6 +96,12 @@ extension MCPClientInstall {
                     url: url, detail: "The file identity metadata is incomplete."
                 )
             }
+            if let linkCount = (attributes[.referenceCount] as? NSNumber)?.uint64Value,
+               linkCount > 1 {
+                throw InstallWorkflowError.multiplyLinkedConfiguration(
+                    url: url, linkCount: linkCount
+                )
+            }
             let contents = try boundedConfigurationData(at: url)
             return .regular(
                 device: device,
