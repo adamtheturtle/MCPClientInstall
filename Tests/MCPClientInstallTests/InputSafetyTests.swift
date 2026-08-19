@@ -23,9 +23,14 @@ struct InputSafetyTests {
     @Test func cyclicFoundationContainersAreRejectedBeforeSerialization() {
         let cycle = NSMutableDictionary()
         cycle["self"] = cycle
+        let arrayCycle = NSMutableArray()
+        arrayCycle.add(arrayCycle)
 
         #expect(throws: MCPClientInstall.JSONConfigError.invalidJSONObject) {
             try MCPClientInstall.prettyJSONData(from: ["unrelated": cycle])
+        }
+        #expect(throws: MCPClientInstall.JSONConfigError.invalidJSONObject) {
+            try MCPClientInstall.prettyJSONData(from: ["unrelated": arrayCycle])
         }
     }
 

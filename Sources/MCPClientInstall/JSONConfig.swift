@@ -113,26 +113,67 @@ public extension MCPClientInstall {
     ) -> Bool {
         guard depth <= 128 else { return false }
 
-        if let dictionary = value as? NSDictionary {
-            let identity = ObjectIdentifier(dictionary)
-            guard ancestors.insert(identity).inserted else { return false }
-            defer { ancestors.remove(identity) }
-            for (key, child) in dictionary {
-                guard key is String,
-                      hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors)
-                else { return false }
+        if let dictionary = value as? NSMutableDictionary {
+            return validateFoundationDictionary(dictionary, depth: depth, ancestors: &ancestors)
+        }
+        if let array = value as? NSMutableArray {
+            return validateFoundationArray(array, depth: depth, ancestors: &ancestors)
+        }
+        if let dictionary = value as? [String: Any] {
+            for child in dictionary.values {
+                guard hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors) else {
+                    return false
+                }
             }
-        } else if let array = value as? NSArray {
-            let identity = ObjectIdentifier(array)
-            guard ancestors.insert(identity).inserted else { return false }
-            defer { ancestors.remove(identity) }
+            return true
+        }
+        if let array = value as? [Any] {
             for child in array {
                 guard hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors) else {
                     return false
                 }
             }
+            return true
+        }
+        if let dictionary = value as? NSDictionary {
+            return validateFoundationDictionary(dictionary, depth: depth, ancestors: &ancestors)
+        }
+        if let array = value as? NSArray {
+            return validateFoundationArray(array, depth: depth, ancestors: &ancestors)
         }
 
+        return true
+    }
+
+    private static func validateFoundationDictionary(
+        _ dictionary: NSDictionary,
+        depth: Int,
+        ancestors: inout Set<ObjectIdentifier>
+    ) -> Bool {
+        let identity = ObjectIdentifier(dictionary)
+        guard ancestors.insert(identity).inserted else { return false }
+        defer { ancestors.remove(identity) }
+        for (key, child) in dictionary {
+            guard key is String,
+                  hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors)
+            else { return false }
+        }
+        return true
+    }
+
+    private static func validateFoundationArray(
+        _ array: NSArray,
+        depth: Int,
+        ancestors: inout Set<ObjectIdentifier>
+    ) -> Bool {
+        let identity = ObjectIdentifier(array)
+        guard ancestors.insert(identity).inserted else { return false }
+        defer { ancestors.remove(identity) }
+        for child in array {
+            guard hasBoundedAcyclicContainers(child, depth: depth + 1, ancestors: &ancestors) else {
+                return false
+            }
+        }
         return true
     }
 
