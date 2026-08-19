@@ -45,4 +45,22 @@ struct TOMLSemanticsTests {
         #expect(merged.text.contains(#"[mcp_servers." demo "]"#))
         #expect(merged.text.contains("[mcp_servers.demo]"))
     }
+
+    @Test func headerCommentBracketDoesNotHideExistingServer() throws {
+        let original = """
+        [mcp_servers.demo] # misleading ]
+        command = "/old"
+        args = ["old"]
+        """
+        let server = MCPServerSpec(name: "demo", command: "/new", arguments: ["new"])
+
+        let merged = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+
+        #expect(merged.alreadyPresent)
+        #expect(merged.text.components(separatedBy: "[mcp_servers.demo]").count == 2)
+        #expect(MCPClientInstall.codexServerIsConfigured(server, in: merged.text))
+        #expect(throws: Never.self) {
+            try MCPClientInstall.validateCodexTOML(merged.text)
+        }
+    }
 }
