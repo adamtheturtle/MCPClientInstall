@@ -87,12 +87,7 @@ public extension MCPClientInstall {
                 format: format,
                 at: url,
                 displacedSuffix: displacedSuffix,
-                exchangeItem: atomicExchange,
-                beforeExchange: {},
-                afterExchange: {},
-                syncFile: syncConfigurationFile,
-                syncDirectory: syncConfigurationDirectory,
-                moveItem: { try FileManager.default.moveItem(at: $0, to: $1) }
+                hooks: .init(moveItem: { try FileManager.default.moveItem(at: $0, to: $1) })
             )
         }
     }
@@ -104,12 +99,23 @@ extension MCPClientInstall {
         format: ConfigurationFormat,
         at url: URL,
         displacedSuffix: String,
-        exchangeItem: (URL, URL) throws -> Void = atomicExchange,
-        beforeExchange: () throws -> Void = {},
-        afterExchange: () throws -> Void = {},
-        syncFile: (URL) throws -> Void = syncConfigurationFile,
-        syncDirectory: (URL) throws -> Void = syncConfigurationDirectory,
-        moveItem: (URL, URL) throws -> Void,
+        moveItem: @escaping (URL, URL) throws -> Void
+    ) throws -> RestoreWorkflowResult {
+        try restoreBackup(
+            for: server,
+            format: format,
+            at: url,
+            displacedSuffix: displacedSuffix,
+            hooks: .init(moveItem: moveItem)
+        )
+    }
+
+    static func restoreBackup(
+        for server: MCPServerSpec,
+        format: ConfigurationFormat,
+        at url: URL,
+        displacedSuffix: String,
+        hooks: RestoreHooks
     ) throws -> RestoreWorkflowResult {
         do {
             try server.validateBackupPolicy()
@@ -118,7 +124,9 @@ extension MCPClientInstall {
         }
         let backupURL = try sibling(of: url, suffix: server.backupSuffix)
         try requireRegularBackup(at: backupURL)
+        let backupIdentity = try configurationIdentity(at: backupURL)
         try validateBackup(at: backupURL, format: format)
+        try requireUnchanged(backupIdentity, at: backupURL)
 
         let currentKind = configPathKind(at: url)
         guard currentKind == .absent || currentKind == .regularFile else {
@@ -126,43 +134,30 @@ extension MCPClientInstall {
         }
         guard currentKind == .regularFile else {
             do {
-                try syncFile(backupURL)
-                try moveItem(backupURL, url)
-                try syncFile(url)
-                try syncDirectory(url.deletingLastPathComponent())
+                try hooks.syncFile(backupURL)
+                try hooks.moveItem(backupURL, url)
+                try hooks.syncFile(url)
+                try hooks.syncDirectory(url.deletingLastPathComponent())
                 return RestoreWorkflowResult(displacedURL: nil)
             } catch {
                 throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
             }
         }
 
-        let currentIdentity = try configurationIdentity(at: url)
         let displacedURL = try sibling(of: url, suffix: displacedSuffix)
         guard configPathKind(at: displacedURL) == .absent else {
             throw InstallWorkflowError.displacedFileExists(url: displacedURL)
         }
-        do {
-            try syncFile(backupURL)
-            try beforeExchange()
-            try exchangeItem(url, backupURL)
-            let displacedMatches = (try? configurationIdentity(at: backupURL)) == currentIdentity
-            guard displacedMatches else {
-                try exchangeItem(url, backupURL)
-                try syncDirectory(url.deletingLastPathComponent())
-                throw InstallWorkflowError.configurationChanged(url: url)
-            }
-            try syncFile(url)
-            try syncDirectory(url.deletingLastPathComponent())
-            try afterExchange()
-            try moveItem(backupURL, displacedURL)
-            try syncFile(displacedURL)
-            try syncDirectory(url.deletingLastPathComponent())
-            return RestoreWorkflowResult(displacedURL: displacedURL)
-        } catch let error as InstallWorkflowError {
-            throw error
-        } catch {
-            throw InstallWorkflowError.restorationFailed(url: url, detail: error.localizedDescription)
-        }
+        return try restoreOverExistingConfiguration(
+            state: .init(
+                format: format,
+                url: url,
+                backupURL: backupURL,
+                backupIdentity: backupIdentity,
+                displacedURL: displacedURL
+            ),
+            hooks: hooks
+        )
     }
 
     private static func requireRegularBackup(at backupURL: URL) throws {
@@ -345,7 +340,7 @@ extension MCPClientInstall {
         }
     }
 
-    private static func validateBackup(at url: URL, format: ConfigurationFormat) throws {
+    static func validateBackup(at url: URL, format: ConfigurationFormat) throws {
         do {
             switch format {
             case .json:
