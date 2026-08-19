@@ -119,7 +119,9 @@ public enum MCPClientInstall {
     /// A file that doesn't exist yet has no metadata to keep and nothing to back
     /// up, so it takes the plain write.
     public static func writeConfig(_ data: Data, to url: URL, backupSuffix: String) throws {
-        try writeConfig(data, to: url, backupSuffix: backupSuffix, beforeReplacing: {})
+        try withConfigurationLock(at: url) {
+            try writeConfig(data, to: url, backupSuffix: backupSuffix, beforeReplacing: {})
+        }
     }
 
     static func writeConfig(

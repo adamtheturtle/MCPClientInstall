@@ -113,6 +113,42 @@ struct TransactionIsolationTests {
         #expect(FileManager.default.fileExists(atPath: file.path))
     }
 
+    @Test func publicWritesWaitForTheConfigurationTransactionLock() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        let lockHeld = DispatchSemaphore(value: 0)
+        let releaseLock = DispatchSemaphore(value: 0)
+        let writeFinished = DispatchSemaphore(value: 0)
+        let failures = FailureBox()
+        let holderFinished = DispatchSemaphore(value: 0)
+
+        Thread.detachNewThread {
+            defer { holderFinished.signal() }
+            do {
+                try MCPClientInstall.withConfigurationLock(at: file) {
+                    lockHeld.signal()
+                    releaseLock.wait()
+                }
+            } catch { failures.append(error.localizedDescription) }
+        }
+        #expect(lockHeld.wait(timeout: .now() + .seconds(5)) == .success)
+
+        Thread.detachNewThread {
+            defer { writeFinished.signal() }
+            do {
+                try MCPClientInstall.writeConfig(
+                    Data("{}".utf8), to: file, backupSuffix: ".backup"
+                )
+            } catch { failures.append(error.localizedDescription) }
+        }
+
+        #expect(writeFinished.wait(timeout: .now() + .milliseconds(50)) == .timedOut)
+        releaseLock.signal()
+        #expect(holderFinished.wait(timeout: .now() + .seconds(5)) == .success)
+        #expect(writeFinished.wait(timeout: .now() + .seconds(5)) == .success)
+        #expect(failures.values.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+
     @Test func aPathSwapBeforeReplacementIsRejected() throws {
         let directory = temporaryDirectory()
         let file = directory.appendingPathComponent("config.json")
