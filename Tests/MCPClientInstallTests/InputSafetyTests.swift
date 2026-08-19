@@ -248,15 +248,44 @@ struct InputSafetyTests {
                 Data(#"{"approved":true}"#.utf8),
                 to: file,
                 backupSuffix: ".backup",
-                beforeReplacing: {},
-                afterWritingTemporary: { temporary in
-                    try FileManager.default.removeItem(at: temporary)
-                    try Data(#"{"malicious":true}"#.utf8).write(to: temporary)
-                }
+                hooks: .init(
+                    beforeReplacing: {},
+                    afterWritingTemporary: { temporary in
+                        try FileManager.default.removeItem(at: temporary)
+                        try Data(#"{"malicious":true}"#.utf8).write(to: temporary)
+                    }
+                )
             )
         }
 
         #expect(try Data(contentsOf: file) == original)
+    }
+
+    @Test func aFinalTargetSwapIsReversedWithoutOverwritingTheConcurrentFile() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let parked = directory.appendingPathComponent("parked.json")
+        let original = Data("{}".utf8)
+        let concurrent = Data(#"{"concurrent":true}"#.utf8)
+        try original.write(to: file)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.configurationChanged(url: file)) {
+            try MCPClientInstall.writeConfig(
+                Data(#"{"approved":true}"#.utf8),
+                to: file,
+                backupSuffix: ".backup",
+                hooks: .init(
+                    beforeReplacing: {},
+                    afterCheckingTarget: {
+                        try FileManager.default.moveItem(at: file, to: parked)
+                        try concurrent.write(to: file)
+                    }
+                )
+            )
+        }
+
+        #expect(try Data(contentsOf: file) == concurrent)
+        #expect(try Data(contentsOf: parked) == original)
     }
 
     private func temporaryDirectory() -> URL {
