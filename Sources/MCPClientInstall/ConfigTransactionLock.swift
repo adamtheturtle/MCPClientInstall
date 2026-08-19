@@ -21,55 +21,46 @@ extension MCPClientInstall {
             if case .regular = self { return true }
             return false
         }
+
+        /// The bytes this identity was taken from, or nil when nothing was there.
+        var contents: Data? {
+            if case let .regular(_, _, _, _, contents) = self { return contents }
+            return nil
+        }
     }
 
+    /// Serializes configuration transactions on the directory holding the file.
+    ///
+    /// The lock is an exclusive `flock` on a descriptor for the configuration's
+    /// own directory. Nothing is created, so a rejected install leaves no trace
+    /// beside the configuration, and there is no shared lock directory another
+    /// local user could pre-create, hold, or unlink out from under a waiter.
+    ///
+    /// Locking the directory the configuration lives in also keeps one identity
+    /// per configuration: every process reaches the same inode no matter how the
+    /// path is spelled, what `TMPDIR` says, or whether the host is sandboxed.
+    /// Configurations sharing a directory therefore serialize against each
+    /// other, which is stricter than necessary but never wrong.
     static func withConfigurationLock<Result>(
         at configURL: URL,
         _ operation: () throws -> Result
     ) throws -> Result {
-        let lockDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MCPClientInstall-locks", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(
-                at: lockDirectory,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: 0o700]
-            )
-        } catch {
-            throw InstallWorkflowError.lockFailed(
-                url: lockDirectory, detail: error.localizedDescription
-            )
+        let directory = configURL.deletingLastPathComponent()
+        let descriptor = directory.path.withCString {
+            open($0, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         }
-        let lockURL = lockDirectory.appendingPathComponent("\(stableLockKey(for: configURL)).lock")
-        let descriptor = lockURL.path.withCString {
-            open($0, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
-        }
-        guard descriptor >= 0 else {
-            throw InstallWorkflowError.lockFailed(
-                url: lockURL,
-                detail: NSError(domain: NSPOSIXErrorDomain, code: Int(errno)).localizedDescription
-            )
-        }
+        guard descriptor >= 0 else { throw lockFailure(at: directory) }
         defer { _ = close(descriptor) }
-        guard flock(descriptor, LOCK_EX) == 0 else {
-            throw InstallWorkflowError.lockFailed(
-                url: lockURL,
-                detail: NSError(domain: NSPOSIXErrorDomain, code: Int(errno)).localizedDescription
-            )
-        }
+        guard flock(descriptor, LOCK_EX) == 0 else { throw lockFailure(at: directory) }
         defer { _ = flock(descriptor, LOCK_UN) }
         return try operation()
     }
 
-    /// Lock files live in the process-temporary lock directory and intentionally
-    /// persist so concurrent and future waiters always open the same inode.
-    private static func stableLockKey(for configURL: URL) -> String {
-        var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in configURL.standardizedFileURL.path.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
-        }
-        return String(hash, radix: 16)
+    private static func lockFailure(at url: URL) -> InstallWorkflowError {
+        .lockFailed(
+            url: url,
+            detail: NSError(domain: NSPOSIXErrorDomain, code: Int(errno)).localizedDescription
+        )
     }
 
     static func configurationIdentity(at url: URL) throws -> ConfigurationIdentity {

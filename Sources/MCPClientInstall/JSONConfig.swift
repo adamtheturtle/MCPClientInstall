@@ -209,7 +209,7 @@ public extension MCPClientInstall {
             open($0, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
         }
         guard descriptor >= 0 else {
-            throw ConfigurationReadError.unsafePath(configPathKind(at: url))
+            throw ConfigurationReadError.unsafePath(openFailureKind(at: url, code: errno))
         }
         defer { _ = close(descriptor) }
 

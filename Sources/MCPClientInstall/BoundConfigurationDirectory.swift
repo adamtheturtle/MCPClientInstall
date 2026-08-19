@@ -24,7 +24,7 @@ final class BoundConfigurationDirectory {
         guard descriptor >= 0 else {
             throw MCPClientInstall.InstallWorkflowError.unsafePath(
                 url: directory,
-                kind: MCPClientInstall.configPathKind(at: directory)
+                kind: MCPClientInstall.openFailureKind(at: directory, code: errno)
             )
         }
         var status = stat()

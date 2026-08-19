@@ -152,6 +152,43 @@ struct PathSafetyTests {
         #expect(try addingMCPServer(server, toCodexTOML: "").text.contains("team/server"))
     }
 
+    @Test func defaultBackupSuffixesDistinguishEscapedAndLiteralNames() {
+        // Without escaping the escape character, "a A" and "a_20A" both encode
+        // as "a_20A", so installing one would overwrite the other's backup.
+        let escaped = MCPServerSpec(name: "a A", command: "/demo")
+        let literal = MCPServerSpec(name: "a_20A", command: "/demo")
+
+        #expect(escaped.backupSuffix != literal.backupSuffix)
+        #expect(isSafeFilenameSuffix(escaped.backupSuffix))
+        #expect(isSafeFilenameSuffix(literal.backupSuffix))
+    }
+
+    @Test func unreadableConfigurationsAreNotClassifiedAsSafeToWrite() throws {
+        try #require(getuid() != 0, "Only a non-root user can be denied a read.")
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+        try Data("{}".utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+
+        do {
+            _ = try MCPClientInstall.existingJSON(at: file)
+            Issue.record("Expected an unreadable configuration to be refused")
+        } catch let MCPClientInstall.ConfigurationReadError.unsafePath(kind) {
+            // A permission failure says nothing about what is at the path, so it
+            // must not be reported as a kind the installer treats as safe.
+            #expect(MCPClientInstall.refusalReason(for: kind, fileName: "config.json") != nil)
+        }
+    }
+
+    @Test func emptyConfigurationsAreWrittenRatherThanRefused() throws {
+        let file = temporaryDirectory().appendingPathComponent("config.json")
+
+        try MCPClientInstall.writeConfig(Data(), to: file, backupSuffix: ".backup")
+        #expect(try Data(contentsOf: file).isEmpty)
+
+        try MCPClientInstall.writeConfig(Data(), to: file, backupSuffix: ".backup")
+        #expect(try Data(contentsOf: file).isEmpty)
+    }
+
     @Test func directWritesRejectUnsafeBackupSuffixesWithoutCreatingAFile() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
 

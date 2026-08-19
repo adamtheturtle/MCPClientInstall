@@ -167,4 +167,58 @@ struct TOMLSemanticsTests {
         #expect(merged.text.contains("path = \"/one\""))
         #expect(MCPClientInstall.codexServerIsConfigured(server, in: merged.text))
     }
+
+    @Test func repeatedRewritesDoNotGrowBlankLines() throws {
+        let original = """
+        [mcp_servers.demo]
+        command = "/old"
+        args = ["old"]
+
+        [tail]
+        value = 1
+        """
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        let once = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+        let twice = try MCPClientInstall.codexConfigByAddingServer(to: once.text, server: server)
+        let thrice = try MCPClientInstall.codexConfigByAddingServer(to: twice.text, server: server)
+
+        #expect(once.text == twice.text)
+        #expect(twice.text == thrice.text)
+        #expect(!once.text.contains("\n\n\n"))
+    }
+
+    @Test func blankLinesInsideCustomValuesSurviveRepeatedRewrites() throws {
+        let original = #"""
+        [mcp_servers.demo]
+        command = "/old"
+        args = ["old"]
+        note = """
+        one
+
+        two
+        """
+        """#
+        let server = MCPServerSpec(name: "demo", command: "/new")
+
+        let once = try MCPClientInstall.codexConfigByAddingServer(to: original, server: server)
+        let twice = try MCPClientInstall.codexConfigByAddingServer(to: once.text, server: server)
+
+        #expect(once.text.contains("one\n\ntwo"))
+        #expect(once.text == twice.text)
+    }
+
+    @Test(arguments: [
+        "mcp_servers.demo = { command = \"/old\", args = [\"old\"] }",
+        "[mcp_servers]\ndemo = { command = \"/old\", args = [\"old\"] }"
+    ])
+    func inlineServerDeclarationsAreRefusedRatherThanRewritten(original: String) throws {
+        #expect(MCPClientInstall.scanCodexConfig(original, serverName: "demo").declaration == .other)
+        #expect(throws: MCPClientInstall.TOMLConfigError.self) {
+            try MCPClientInstall.codexConfigByAddingServer(
+                to: original,
+                server: MCPServerSpec(name: "demo", command: "/new")
+            )
+        }
+    }
 }

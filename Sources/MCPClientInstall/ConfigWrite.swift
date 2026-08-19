@@ -82,6 +82,26 @@ public enum MCPClientInstall {
         }
     }
 
+    /// The kind to report when `open` fails on a path.
+    ///
+    /// Only some failures say anything about what is at the path. A refused
+    /// symlink or a non-directory component is a genuine path problem, while a
+    /// permission, descriptor-exhaustion, or I/O failure says nothing about the
+    /// path and must not be reported as a kind a caller treats as safe.
+    static func openFailureKind(at url: URL, code: Int32) -> ConfigPathKind {
+        switch code {
+        case ENOENT, ELOOP, ENOTDIR, ENXIO, EOPNOTSUPP:
+            configPathKind(at: url)
+
+        default:
+            .unavailable(
+                detail: NSError(
+                    domain: NSPOSIXErrorDomain, code: Int(code)
+                ).localizedDescription
+            )
+        }
+    }
+
     /// The reason the installer won't touch this path, or nil when it is safe.
     ///
     /// `attributesOfItem` does not follow symlinks, so a link is seen as a link
