@@ -134,6 +134,21 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func boundedReadsRemainBoundToTheOpenedFileAfterAPathSwap() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let outside = directory.appendingPathComponent("outside.json")
+        try Data("{}".utf8).write(to: file)
+        try Data(#"{"outside":true}"#.utf8).write(to: outside)
+
+        let data = try MCPClientInstall.boundedConfigurationData(at: file) {
+            try FileManager.default.removeItem(at: file)
+            try FileManager.default.createSymbolicLink(at: file, withDestinationURL: outside)
+        }
+
+        #expect(String(data: data, encoding: .utf8) == "{}")
+    }
+
     @Test func refusesAnOversizedPreparedConfigurationWithoutWriting() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         let oversized = MCPServerSpec(
