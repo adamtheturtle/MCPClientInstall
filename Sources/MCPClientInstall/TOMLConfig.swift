@@ -189,17 +189,22 @@ public extension MCPClientInstall {
             guard let range = scan.tableLineRange else {
                 throw TOMLConfigError("The server table could not be located.")
             }
-            var lines = scan.lines
-            let body = Array(lines[range]).map(stripCarriageReturn)
-            var replacement = try codexTableReplacement(body: body, server: server)
-            if range.lowerBound == 0, text.hasPrefix("\u{FEFF}"), !replacement.isEmpty {
-                replacement[0] = "\u{FEFF}" + replacement[0]
+            let physicalLines = tomlPhysicalLines(text)
+            guard physicalLines.count == scan.lines.count else {
+                throw TOMLConfigError("The server table's physical lines could not be located.")
             }
-            lines.replaceSubrange(
-                range,
-                with: replacement
-            )
-            result = (lines.map(stripCarriageReturn).joined(separator: newline), true)
+            var body = physicalLines[range].map(\.content)
+            if range.lowerBound == 0, text.hasPrefix("\u{FEFF}"), !body.isEmpty {
+                body[0] = String(body[0].dropFirst())
+            }
+            var replacement = try codexTableReplacement(body: body, server: server)
+                .joined(separator: newline)
+            if range.lowerBound == 0, text.hasPrefix("\u{FEFF}") {
+                replacement = "\u{FEFF}" + replacement
+            }
+            let prefix = physicalLines[..<range.lowerBound].map(\.text).joined()
+            let suffix = physicalLines[range.upperBound...].map(\.text).joined()
+            result = (prefix + replacement + suffix, true)
 
         case .other:
             throw TOMLConfigError(
