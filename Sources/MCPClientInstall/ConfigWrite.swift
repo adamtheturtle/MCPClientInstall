@@ -48,6 +48,7 @@ public enum MCPClientInstall {
 
     public enum ConfigWriteError: Error, Equatable, Sendable {
         case unsafeBackupSuffix(String)
+        case unsafePath(ConfigPathKind)
     }
 
     /// Classifies the config path without following symlinks.
@@ -130,6 +131,10 @@ public enum MCPClientInstall {
     ) throws {
         guard isSafeFilenameSuffix(backupSuffix) else {
             throw ConfigWriteError.unsafeBackupSuffix(backupSuffix)
+        }
+        let targetKind = configPathKind(at: url)
+        guard targetKind == .absent || targetKind == .regularFile else {
+            throw ConfigWriteError.unsafePath(targetKind)
         }
         let manager = FileManager.default
         guard manager.fileExists(atPath: url.path) else {
