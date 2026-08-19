@@ -25,6 +25,7 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
     public enum ConfigurationLocationError: Error, Equatable, Sendable {
         case unsafeDirectoryComponent(String)
         case nonFileHomeURL(URL)
+        case unsafeFileName(String)
         case outsideHomeDirectory(URL)
     }
 
@@ -55,6 +56,21 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
             fallbackDirectoryComponents: [String],
             fileName: String,
             format: MCPClientInstall.ConfigurationFormat
+        ) throws {
+            guard Self.isSafeDirectoryComponent(fileName) else {
+                throw ConfigurationLocationError.unsafeFileName(fileName)
+            }
+            self.directoryComponents = directoryComponents
+            self.fallbackDirectoryComponents = fallbackDirectoryComponents
+            self.fileName = fileName
+            self.format = format
+        }
+
+        fileprivate init(
+            validatedDirectoryComponents directoryComponents: [String],
+            fallbackDirectoryComponents: [String],
+            fileName: String,
+            format: MCPClientInstall.ConfigurationFormat
         ) {
             self.directoryComponents = directoryComponents
             self.fallbackDirectoryComponents = fallbackDirectoryComponents
@@ -68,6 +84,10 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
 
         public func fallbackDirectory(relativeTo homeDirectory: URL) throws -> URL {
             try safeDirectory(components: fallbackDirectoryComponents, relativeTo: homeDirectory)
+        }
+
+        public func file(relativeTo homeDirectory: URL) throws -> URL {
+            try directory(relativeTo: homeDirectory).appendingPathComponent(fileName)
         }
 
         private func safeDirectory(components: [String], relativeTo homeDirectory: URL) throws -> URL {
@@ -127,24 +147,24 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
         switch self {
         case .claudeDesktop:
             ConfigurationLocation(
-                directoryComponents: ["Library", "Application Support", "Claude"],
+                validatedDirectoryComponents: ["Library", "Application Support", "Claude"],
                 fallbackDirectoryComponents: ["Library", "Application Support"],
                 fileName: "claude_desktop_config.json",
                 format: .json
             )
         case .claudeCode:
             ConfigurationLocation(
-                directoryComponents: [], fallbackDirectoryComponents: [],
+                validatedDirectoryComponents: [], fallbackDirectoryComponents: [],
                 fileName: ".claude.json", format: .json
             )
         case .codex:
             ConfigurationLocation(
-                directoryComponents: [".codex"], fallbackDirectoryComponents: [],
+                validatedDirectoryComponents: [".codex"], fallbackDirectoryComponents: [],
                 fileName: "config.toml", format: .codexTOML
             )
         case .cursor:
             ConfigurationLocation(
-                directoryComponents: [".cursor"], fallbackDirectoryComponents: [],
+                validatedDirectoryComponents: [".cursor"], fallbackDirectoryComponents: [],
                 fileName: "mcp.json", format: .json
             )
         }

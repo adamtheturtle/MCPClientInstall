@@ -37,8 +37,7 @@ let server = MCPServerSpec(
 )
 
 let location = MCPDesktopClient.codex.configurationLocation
-let directory = location.directory(relativeTo: homeDirectory)
-let configURL = directory.appendingPathComponent(location.fileName)
+let configURL = try location.file(relativeTo: homeDirectory)
 
 // JSON: Claude Desktop, Claude Code, or Cursor
 let root = try MCPClientInstall.existingJSON(at: configURL)

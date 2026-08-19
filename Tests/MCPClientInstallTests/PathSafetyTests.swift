@@ -11,13 +11,13 @@ struct PathSafetyTests {
     )
     func configurationDirectoriesRejectUnsafeComponents(component: String) throws {
         let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
-        let preferred = MCPDesktopClient.ConfigurationLocation(
+        let preferred = try MCPDesktopClient.ConfigurationLocation(
             directoryComponents: [component],
             fallbackDirectoryComponents: ["safe"],
             fileName: "config.json",
             format: .json
         )
-        let fallback = MCPDesktopClient.ConfigurationLocation(
+        let fallback = try MCPDesktopClient.ConfigurationLocation(
             directoryComponents: ["safe"],
             fallbackDirectoryComponents: [component],
             fileName: "config.json",
@@ -32,9 +32,9 @@ struct PathSafetyTests {
         }
     }
 
-    @Test func configurationDirectoriesRejectNonFileHomeURLs() {
+    @Test func configurationDirectoriesRejectNonFileHomeURLs() throws {
         let home = URL(string: "https://example.com/home")!
-        let location = MCPDesktopClient.ConfigurationLocation(
+        let location = try MCPDesktopClient.ConfigurationLocation(
             directoryComponents: ["safe"],
             fallbackDirectoryComponents: [],
             fileName: "config.json",
@@ -51,7 +51,7 @@ struct PathSafetyTests {
         let outside = temporaryDirectory()
         let link = home.appendingPathComponent("escape", isDirectory: true)
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
-        let location = MCPDesktopClient.ConfigurationLocation(
+        let location = try MCPDesktopClient.ConfigurationLocation(
             directoryComponents: ["escape"],
             fallbackDirectoryComponents: [],
             fileName: "config.json",
@@ -73,6 +73,21 @@ struct PathSafetyTests {
 
         #expect(throws: MCPDesktopClient.ConfigurationLocationError.self) {
             try MCPDesktopClient.codex.configurationLocation.directory(relativeTo: home)
+        }
+    }
+
+    @Test(
+        "Configuration filenames reject traversal and embedded separators",
+        arguments: ["..", ".", "../outside.json", "nested/config.json", "nested\\config.json", ""]
+    )
+    func configurationFilenamesRejectUnsafeComponents(fileName: String) {
+        #expect(throws: MCPDesktopClient.ConfigurationLocationError.unsafeFileName(fileName)) {
+            try MCPDesktopClient.ConfigurationLocation(
+                directoryComponents: ["safe"],
+                fallbackDirectoryComponents: [],
+                fileName: fileName,
+                format: .json
+            )
         }
     }
 

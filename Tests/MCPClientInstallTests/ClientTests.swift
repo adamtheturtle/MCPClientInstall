@@ -18,6 +18,8 @@ struct ClientTests {
         #expect(try desktop.directory(relativeTo: home).path == "/Users/example/Library/Application Support/Claude")
         #expect(try desktop.fallbackDirectory(relativeTo: home).path == "/Users/example/Library/Application Support")
         #expect(desktop.fileName == "claude_desktop_config.json")
+        #expect(try desktop.file(relativeTo: home).path
+            == "/Users/example/Library/Application Support/Claude/claude_desktop_config.json")
         #expect(desktop.format == .json)
 
         let codex = MCPDesktopClient.codex.configurationLocation
