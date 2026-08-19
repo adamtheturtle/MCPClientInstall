@@ -230,6 +230,8 @@ extension MCPClientInstall {
             )
         } catch let error as InstallWorkflowError {
             throw error
+        } catch let ConfigWriteError.unsafePath(kind) {
+            throw InstallWorkflowError.unsafePath(url: url, kind: kind)
         } catch {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }

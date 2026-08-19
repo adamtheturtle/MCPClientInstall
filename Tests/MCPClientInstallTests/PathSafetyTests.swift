@@ -130,6 +130,21 @@ struct PathSafetyTests {
         }
     }
 
+    @Test func directWritesRejectUnsafeExistingTargets() throws {
+        let directory = temporaryDirectory()
+        let target = directory.appendingPathComponent("target")
+        let link = directory.appendingPathComponent("config.json")
+        try Data("{}".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(throws: MCPClientInstall.ConfigWriteError.self) {
+            try MCPClientInstall.writeConfig(
+                Data(#"{"changed":true}"#.utf8), to: link, backupSuffix: ".backup"
+            )
+        }
+        #expect(try String(contentsOf: target, encoding: .utf8) == "{}")
+    }
+
     @Test func restoreRejectsAnEscapingDisplacedSuffixBeforeMovingEitherFile() throws {
         let directory = temporaryDirectory()
         let file = directory.appendingPathComponent("config.json")
