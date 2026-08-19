@@ -7,7 +7,7 @@ import Testing
 struct PathSafetyTests {
     @Test(
         "Configuration directories reject traversal and embedded separators",
-        arguments: ["..", ".", "nested/path", "nested\\path", ""]
+        arguments: ["..", ".", "nested/path", "nested\\path", "nul\0component", ""]
     )
     func configurationDirectoriesRejectUnsafeComponents(component: String) throws {
         let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)

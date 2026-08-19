@@ -137,6 +137,7 @@ public enum MCPDesktopClient: String, CaseIterable, Hashable, Identifiable, Send
             !component.isEmpty
                 && component != "."
                 && component != ".."
+                && !component.contains("\0")
                 && !component.contains("/")
                 && !component.contains("\\")
         }
