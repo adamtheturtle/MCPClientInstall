@@ -88,11 +88,12 @@ public extension MCPClientInstall {
         var state = TOMLLineState()
 
         for index in lines.indices {
+            let scannedLine = tomlScanningLine(lines[index], at: index)
             let continuation = state.isInsideMultilineConstruct
-            state.consume(lines[index])
+            state.consume(scannedLine)
             if continuation { continue }
 
-            let line = stripCarriageReturn(lines[index]).trimmingCharacters(in: .whitespaces)
+            let line = stripCarriageReturn(scannedLine).trimmingCharacters(in: .whitespaces)
             if line.isEmpty || line.hasPrefix("#") { continue }
             if line.hasPrefix("[") {
                 guard let path = tomlHeaderKeyPath(line) else { continue }
@@ -138,10 +139,11 @@ public extension MCPClientInstall {
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
             .components(separatedBy: "\n")
         for (offset, rawLine) in lines.enumerated() {
+            let scannedLine = tomlScanningLine(rawLine, at: offset)
             let continuation = state.isInsideMultilineConstruct
-            state.consume(rawLine)
+            state.consume(scannedLine)
             if continuation { continue }
-            let line = stripCarriageReturn(rawLine).trimmingCharacters(in: .whitespaces)
+            let line = stripCarriageReturn(scannedLine).trimmingCharacters(in: .whitespaces)
             if line.isEmpty || line.hasPrefix("#") { continue }
             if line.hasPrefix("[") {
                 if tomlHeaderKeyPath(line) == nil {
@@ -189,9 +191,13 @@ public extension MCPClientInstall {
             }
             var lines = scan.lines
             let body = Array(lines[range]).map(stripCarriageReturn)
+            var replacement = try codexTableReplacement(body: body, server: server)
+            if range.lowerBound == 0, text.hasPrefix("\u{FEFF}"), !replacement.isEmpty {
+                replacement[0] = "\u{FEFF}" + replacement[0]
+            }
             lines.replaceSubrange(
                 range,
-                with: try codexTableReplacement(body: body, server: server)
+                with: replacement
             )
             result = (lines.map(stripCarriageReturn).joined(separator: newline), true)
 

@@ -52,6 +52,10 @@ func tomlKeyValueKeyPath(_ line: String) -> [String]? {
     return nil
 }
 
+func tomlScanningLine(_ line: String, at index: Int) -> String {
+    index == 0 && line.hasPrefix("\u{FEFF}") ? String(line.dropFirst()) : line
+}
+
 func splitTOMLKeyPath(_ value: String) -> [String]? {
     var result: [String] = []
     var current = ""
