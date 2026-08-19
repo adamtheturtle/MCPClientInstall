@@ -80,6 +80,31 @@ struct RestoreSafetyTests {
         #expect(!FileManager.default.fileExists(atPath: file.path))
     }
 
+    @Test func verificationNeverRollsBackAConcurrentUpdate() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let backup = directory.appendingPathComponent("config.json.backup")
+        let concurrent = Data(#"{"concurrent":true}"#.utf8)
+        try Data("{}".utf8).write(to: file)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.verificationTargetChanged(
+            url: file, backupURL: backup
+        )) {
+            try MCPClientInstall.installServer(
+                server,
+                format: .json,
+                at: file,
+                verificationOverride: {
+                    try? concurrent.write(to: file)
+                    return false
+                }
+            )
+        }
+
+        #expect(try Data(contentsOf: file) == concurrent)
+        #expect(try Data(contentsOf: backup) == Data("{}".utf8))
+    }
+
     @Test func rollbackRemovalFailuresAreReportedDistinctly() throws {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         try Data("{}".utf8).write(to: file)

@@ -27,6 +27,7 @@ public extension MCPClientInstall {
         case serializationFailed(url: URL, detail: String)
         case writeFailed(url: URL, detail: String)
         case verificationFailed(url: URL, backupURL: URL?)
+        case verificationTargetChanged(url: URL, backupURL: URL?)
         case verificationRollbackFailed(url: URL, backupURL: URL?, detail: String)
         case verificationRollbackCleanupFailed(url: URL, displacedURL: URL, detail: String)
         case backupUnavailable(url: URL)
@@ -236,12 +237,18 @@ extension MCPClientInstall {
             throw InstallWorkflowError.writeFailed(url: url, detail: error.localizedDescription)
         }
 
+        let committedIdentity = try configurationIdentity(at: url)
+        let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
         let verified: Bool = if let verificationOverride = hooks.verificationOverride {
             verificationOverride()
         } else {
             verifyServer(server, format: format, at: url)
         }
-        let backupURL = existed ? try sibling(of: url, suffix: server.backupSuffix) : nil
+        do {
+            try requireUnchanged(committedIdentity, at: url)
+        } catch {
+            throw InstallWorkflowError.verificationTargetChanged(url: url, backupURL: backupURL)
+        }
         guard verified else {
             try rollbackAfterFailedVerification(
                 server: server,
