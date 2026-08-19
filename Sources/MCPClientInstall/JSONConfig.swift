@@ -80,7 +80,6 @@ public extension MCPClientInstall {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
 
         let data = try boundedConfigurationData(at: url)
-        try rejectDuplicateJSONKeys(in: data)
         // Whitespace-only counts as blank. A file holding just a newline is empty
         // to the person who made it, and rejecting it as corrupt would refuse to
         // write a config the installer could perfectly well create.
@@ -88,6 +87,7 @@ public extension MCPClientInstall {
             throw CocoaError(.fileReadInapplicableStringEncoding)
         }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [:] }
+        try rejectDuplicateJSONKeys(in: data)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw CocoaError(.propertyListReadCorrupt)
         }
