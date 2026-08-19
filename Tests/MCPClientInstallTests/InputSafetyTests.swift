@@ -78,6 +78,22 @@ struct InputSafetyTests {
         }
     }
 
+    @Test func rejectedInstallsDoNotLeaveLocksBesideConfiguration() throws {
+        let directory = temporaryDirectory()
+        let file = directory.appendingPathComponent("config.json")
+        let sidecar = directory.appendingPathComponent(".config.json.mcp-client-install.lock")
+        try Data("{".utf8).write(to: file)
+
+        #expect(throws: MCPClientInstall.InstallWorkflowError.self) {
+            try MCPClientInstall.installServer(
+                MCPServerSpec(name: "demo", command: "/demo"),
+                format: .json,
+                at: file
+            )
+        }
+        #expect(!FileManager.default.fileExists(atPath: sidecar.path))
+    }
+
     @Test func restoreReportsInvalidServersAsWorkflowErrors() {
         let file = temporaryDirectory().appendingPathComponent("config.json")
         do {
