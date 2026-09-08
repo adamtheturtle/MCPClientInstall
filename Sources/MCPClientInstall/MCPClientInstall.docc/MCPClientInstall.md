@@ -4,19 +4,16 @@ Safely add a local Model Context Protocol server to desktop-client configuration
 
 ## Overview
 
-MCPClientInstall edits the JSON configuration used by Claude Desktop, Claude Code,
-and Cursor, and the TOML configuration used by Codex. Existing keys are retained.
+MCPClientInstall edits the JSON configuration used by Claude Desktop, Claude Code, and Cursor, and the TOML configuration used by Codex.
+Existing keys are retained.
 Ambiguous or incompatible declarations are refused instead of overwritten.
 
-Use ``MCPServerSpec`` to describe a server, then merge it with
-``addingMCPServer(_:toJSON:)`` or ``addingMCPServer(_:toCodexTOML:)``.
+Use ``MCPServerSpec`` to describe a server, then merge it with ``addingMCPServer(_:toJSON:)`` or ``addingMCPServer(_:toCodexTOML:)``.
 
-The package also provides guarded file replacement through
-``MCPClientInstall/writeConfig(_:to:backupSuffix:)``.
+The package also provides guarded file replacement through ``MCPClientInstall/writeConfig(_:to:backupSuffix:)``.
 
-``MCPDesktopClient/configurationLocation`` describes each supported client's
-configuration relative to a caller-supplied home directory. Applications remain
-responsible for resolving that home and obtaining filesystem authorization.
+``MCPDesktopClient/configurationLocation`` describes each supported client's configuration relative to a caller-supplied home directory.
+Applications remain responsible for resolving that home and obtaining filesystem authorization.
 
 ## Topics
 

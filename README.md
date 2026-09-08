@@ -2,17 +2,14 @@
 
 Safe, non-destructive editing of MCP desktop-client configuration files in Swift.
 
-[Documentation](https://swiftpackageindex.com/adamtheturtle/MCPClientInstall/documentation/mcpclientinstall) |
-[Swift Package Index](https://swiftpackageindex.com/adamtheturtle/MCPClientInstall)
+[Documentation](https://swiftpackageindex.com/adamtheturtle/MCPClientInstall/documentation/mcpclientinstall) | [Swift Package Index](https://swiftpackageindex.com/adamtheturtle/MCPClientInstall)
 
 MCPClientInstall adds or updates a local MCP server in:
 
 - Claude Desktop, Claude Code, and Cursor JSON configuration
 - Codex TOML configuration
 
-It preserves unrelated settings, refuses ambiguous configuration shapes, handles
-quoted TOML keys and multiline values, retains existing line endings, and can replace
-files while preserving metadata and leaving a backup.
+It preserves unrelated settings, refuses ambiguous configuration shapes, handles quoted TOML keys and multiline values, retains existing line endings, and can replace files while preserving metadata and leaving a backup.
 
 ## Installation
 
@@ -54,8 +51,7 @@ let updated = try MCPClientInstall.prepareServerUpdate(
 )
 ```
 
-Writing is deliberately separate from merging, so an application can show a diff or
-ask for confirmation first:
+Writing is deliberately separate from merging, so an application can show a diff or ask for confirmation first:
 
 ```swift
 try MCPClientInstall.writeConfig(
@@ -66,8 +62,7 @@ try MCPClientInstall.writeConfig(
 
 ```
 
-For a complete prepare, safe replacement, read-back verification, and recoverable
-backup in one operation:
+For a complete prepare, safe replacement, read-back verification, and recoverable backup in one operation:
 
 ```swift
 let result = try MCPClientInstall.installServer(
@@ -86,17 +81,15 @@ let restored = try MCPClientInstall.restoreBackup(
 
 ## Safety
 
-MCPClientInstall does not silently replace malformed or structurally incompatible
-configuration. Its file helper refuses symlinks and special files, retains metadata
-when replacing an existing file, and keeps the previous contents beside the target.
+MCPClientInstall does not silently replace malformed or structurally incompatible configuration.
+Its file helper refuses symlinks and special files, retains metadata when replacing an existing file, and keeps the previous contents beside the target.
 
 Applications remain responsible for obtaining user consent and filesystem access.
 The package has no UI and never searches for or modifies configuration on import.
 
 ## Requirements
 
-MCPClientInstall depends on `swift-toml`, including its C++ `toml++` parser target,
-so consumers need a Swift toolchain with C++ interoperability support.
+MCPClientInstall depends on `swift-toml`, including its C++ `toml++` parser target, so consumers need a Swift toolchain with C++ interoperability support.
 
 - Swift 6.2+
 - macOS 14+
@@ -104,9 +97,9 @@ so consumers need a Swift toolchain with C++ interoperability support.
 
 ## Documentation
 
-The package includes a DocC catalog and is configured for hosted documentation on
-Swift Package Index.
+The package includes a DocC catalog and is configured for hosted documentation on Swift Package Index.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT.
+See [LICENSE](LICENSE).
