@@ -39,7 +39,12 @@ jobs:
           persist-credentials: false
       - name: Swift version
         run: swift --version
+      - name: Prepare test user
+        # Permission-denied tests need an unprivileged user; containers default to root.
+        run: |
+          useradd --create-home swift-tests
+          chown -R swift-tests:swift-tests "$GITHUB_WORKSPACE"
       - name: Build
-        run: swift build --build-tests
+        run: runuser -u swift-tests -- swift build --build-tests
       - name: Test
-        run: swift test
+        run: runuser -u swift-tests -- swift test
