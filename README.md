@@ -51,7 +51,7 @@ let updated = try MCPClientInstall.prepareServerUpdate(
 )
 ```
 
-Writing is deliberately separate from merging, so an application can show a diff or ask for confirmation first:
+Before writing the merged configuration, an application can display a diff or prompt the user:
 
 ```swift
 try MCPClientInstall.writeConfig(
